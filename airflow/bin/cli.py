@@ -1247,6 +1247,12 @@ def create_user(args):
         raise SystemExit('Failed to create user.')
 
 
+def sync_perm(args): #noqa
+    appbuilder = cached_appbuilder()
+    print('Update permission, view-menu for all existing roles')
+    appbuilder.sm.sync_roles()
+
+
 Arg = namedtuple(
     'Arg', ['flags', 'help', 'action', 'default', 'nargs', 'type', 'choices', 'metavar'])
 Arg.__new__.__defaults__ = (None, None, None, None, None, None, None)
@@ -1783,6 +1789,11 @@ class CLIFactory(object):
             'args': ('role', 'username', 'email', 'firstname', 'lastname',
                      'password', 'use_random_password'),
         },
+        {
+            'func': sync_perm,
+            'help': "Update existing role's permissions.",
+            'args': tuple(),
+        }
     )
     subparsers_dict = {sp['func'].__name__: sp for sp in subparsers}
     dag_subparsers = (

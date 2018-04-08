@@ -52,6 +52,7 @@ def create_app(config=None, testing=False, app_name="Airflow"):
 
     db = SQLA(app)
 
+
     from airflow import api
     api.load_auth()
     api.api_auth.init_app(app)
@@ -64,10 +65,20 @@ def create_app(config=None, testing=False, app_name="Airflow"):
     configure_logging()
 
     with app.app_context():
+
+        from airflow.www_rbac.security import AirflowSecurityManager
+        security_manager_class = app.config.get('SECURITY_MANAGER_CLASS') or AirflowSecurityManager
+
+        if not issubclass(security_manager_class, AirflowSecurityManager):
+            raise Exception(
+                """Your CUSTOM_SECURITY_MANAGER must now extend AirflowSecurityManager,
+                 not FAB's security manager.""")
+
+
         appbuilder = AppBuilder(
             app,
             db.session,
-            security_manager_class=app.config.get('SECURITY_MANAGER_CLASS'),
+            security_manager_class=security_manager_class,
             base_template='appbuilder/baselayout.html')
 
         def init_views(appbuilder):
@@ -124,12 +135,12 @@ def create_app(config=None, testing=False, app_name="Airflow"):
             # Otherwise, when the name of a view or menu is changed, the framework
             # will add the new Views and Menus names to the backend, but will not
             # delete the old ones.
-            appbuilder.security_cleanup()
 
         init_views(appbuilder)
 
-        from airflow.www_rbac.security import init_roles
-        init_roles(appbuilder)
+        security_manager = appbuilder.sm
+        security_manager.sync_roles()
+
 
         from airflow.www_rbac.api.experimental import endpoints as e
         # required for testing purposes otherwise the module retains

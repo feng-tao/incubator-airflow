@@ -23,6 +23,7 @@ from past.builtins import unicode
 import logging
 import os
 import socket
+from dateutil import tz
 from datetime import datetime, timedelta
 import copy
 import math
@@ -70,10 +71,9 @@ from airflow.utils.dates import infer_time_unit, scale_time_units
 
 from airflow.www_rbac import utils as wwwutils
 from airflow.www_rbac.app import app
-from airflow.www_rbac.decorators import action_logging, gzipped
+from airflow.www_rbac.decorators import action_logging, gzipped, has_dag_access
 from airflow.www_rbac.forms import (DateTimeForm, DateTimeWithNumRunsForm,
                                     DagRunForm, ConnectionForm)
-from airflow.www_rbac.security import is_view_only
 from airflow.www_rbac.widgets import AirflowModelListWidget
 
 PAGE_SIZE = conf.getint('webserver', 'page_size')
@@ -209,10 +209,10 @@ class Airflow(AirflowBaseView):
                                            search=arg_search_query,
                                            showPaused=not hide_paused),
             dag_ids_in_page=page_dag_ids,
-            auto_complete_data=auto_complete_data,
-            view_only=is_view_only(g.user, self.appbuilder))
+            auto_complete_data=auto_complete_data)
 
     @expose('/dag_stats')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @provide_session
     def dag_stats(self, session=None):
@@ -248,6 +248,7 @@ class Airflow(AirflowBaseView):
         return wwwutils.json_response(payload)
 
     @expose('/task_stats')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @provide_session
     def task_stats(self, session=None):
@@ -319,6 +320,7 @@ class Airflow(AirflowBaseView):
         return wwwutils.json_response(payload)
 
     @expose('/code')
+    @has_dag_access(can_dag_read=True)
     @has_access
     def code(self):
         dag_id = request.args.get('dag_id')
@@ -338,6 +340,7 @@ class Airflow(AirflowBaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
     @expose('/dag_details')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @provide_session
     def dag_details(self, session=None):
@@ -371,6 +374,7 @@ class Airflow(AirflowBaseView):
             info=traceback.format_exc()), 500
 
     @expose('/pickle_info')
+    @has_dag_access(can_dag_read=True)
     @has_access
     def pickle_info(self):
         d = {}
@@ -382,6 +386,7 @@ class Airflow(AirflowBaseView):
         return wwwutils.json_response(d)
 
     @expose('/rendered')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def rendered(self):
@@ -418,6 +423,7 @@ class Airflow(AirflowBaseView):
             title=title, )
 
     @expose('/log')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -459,6 +465,7 @@ class Airflow(AirflowBaseView):
             execution_date=execution_date, form=form)
 
     @expose('/task')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def task(self):
@@ -536,6 +543,7 @@ class Airflow(AirflowBaseView):
             dag=dag, title=title)
 
     @expose('/xcom')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -574,6 +582,7 @@ class Airflow(AirflowBaseView):
             dag=dag, title=title)
 
     @expose('/run')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def run(self):
@@ -632,6 +641,7 @@ class Airflow(AirflowBaseView):
         return redirect(origin)
 
     @expose('/trigger')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def trigger(self):
@@ -697,6 +707,7 @@ class Airflow(AirflowBaseView):
         return response
 
     @expose('/clear')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def clear(self):
@@ -726,6 +737,7 @@ class Airflow(AirflowBaseView):
                                    recursive=recursive, confirmed=confirmed)
 
     @expose('/dagrun_clear')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def dagrun_clear(self):
@@ -743,6 +755,7 @@ class Airflow(AirflowBaseView):
                                    recursive=True, confirmed=confirmed)
 
     @expose('/blocked')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @provide_session
     def blocked(self, session=None):
@@ -766,6 +779,7 @@ class Airflow(AirflowBaseView):
         return wwwutils.json_response(payload)
 
     @expose('/dagrun_success')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def dagrun_success(self):
@@ -803,6 +817,7 @@ class Airflow(AirflowBaseView):
             return response
 
     @expose('/success')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def success(self):
@@ -856,6 +871,7 @@ class Airflow(AirflowBaseView):
 
     @expose('/tree')
     @has_access
+    @has_dag_access(can_dag_read=True)
     @gzipped
     @action_logging
     @provide_session
@@ -984,6 +1000,7 @@ class Airflow(AirflowBaseView):
             dag=dag, data=data, blur=blur, num_runs=num_runs)
 
     @expose('/graph')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @gzipped
     @action_logging
@@ -1098,6 +1115,7 @@ class Airflow(AirflowBaseView):
             edges=json.dumps(edges, indent=2), )
 
     @expose('/duration')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1205,6 +1223,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/tries')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1269,6 +1288,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/landing_times')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1347,6 +1367,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/paused', methods=['POST'])
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     @provide_session
@@ -1368,6 +1389,7 @@ class Airflow(AirflowBaseView):
         return "OK"
 
     @expose('/refresh')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     @provide_session
@@ -1387,6 +1409,7 @@ class Airflow(AirflowBaseView):
         return redirect(request.referrer)
 
     @expose('/refresh_all')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def refresh_all(self):
@@ -1395,6 +1418,7 @@ class Airflow(AirflowBaseView):
         return redirect('/')
 
     @expose('/gantt')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1458,6 +1482,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/object/task_instances')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1602,6 +1627,7 @@ class XComModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', "Are you sure you want to delete selected records?",
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1632,6 +1658,7 @@ class ConnectionModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1673,6 +1700,7 @@ class PoolModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1758,6 +1786,7 @@ class VariableModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1852,6 +1881,7 @@ class DagRunModelView(AirflowModelView):
 
     @action('muldelete', "Delete", "Are you sure you want to delete selected records?",
             single=False)
+    @has_dag_access(can_dag_edit=True)
     @provide_session
     def action_muldelete(self, items, session=None):
         self.datamodel.delete_all(items)
@@ -1863,14 +1893,17 @@ class DagRunModelView(AirflowModelView):
         models.DagStat.update(dirty_ids, dirty_only=False, session=session)
 
     @action('set_running', "Set state to 'running'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_running(self, drs):
         return self.set_dagrun_state(drs, State.RUNNING)
 
     @action('set_failed', "Set state to 'failed'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_failed(self, drs):
         return self.set_dagrun_state(drs, State.FAILED)
 
     @action('set_success', "Set state to 'success'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_success(self, drs):
         return self.set_dagrun_state(drs, State.SUCCESS)
 
@@ -2001,24 +2034,28 @@ class TaskInstanceModelView(AirflowModelView):
             flash('Failed to set state', 'error')
 
     @action('set_running', "Set state to 'running'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_running(self, tis):
         self.set_task_instance_state(tis, State.RUNNING)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_failed', "Set state to 'failed'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_failed(self, tis):
         self.set_task_instance_state(tis, State.FAILED)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_success', "Set state to 'success'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_success(self, tis):
         self.set_task_instance_state(tis, State.SUCCESS)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_retry', "Set state to 'up_for_retry'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_retry(self, tis):
         self.set_task_instance_state(tis, State.UP_FOR_RETRY)
         self.update_redirect()
@@ -2042,7 +2079,7 @@ class DagModelView(AirflowModelView):
 
     datamodel = AirflowModelView.CustomSQLAInterface(models.DagModel)
 
-    base_permissions = ['can_list', 'can_show']
+    base_permissions = ['can_list', 'can_show', 'can_dag_read', 'can_dag_edit']
 
     list_columns = ['dag_id', 'is_paused', 'last_scheduler_run',
                     'last_expired', 'scheduler_lock', 'fileloc', 'owners']
