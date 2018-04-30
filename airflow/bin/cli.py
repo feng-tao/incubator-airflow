@@ -1247,7 +1247,7 @@ def create_user(args):
         raise SystemExit('Failed to create user.')
 
 
-def sync_perm(args): #noqa
+def sync_perm(args): # noqa
     appbuilder = cached_appbuilder()
     print('Update permission, view-menu for all existing roles')
     appbuilder.sm.sync_roles()

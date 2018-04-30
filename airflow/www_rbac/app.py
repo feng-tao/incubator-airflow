@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -52,7 +52,6 @@ def create_app(config=None, testing=False, app_name="Airflow"):
 
     db = SQLA(app)
 
-
     from airflow import api
     api.load_auth()
     api.api_auth.init_app(app)
@@ -67,13 +66,13 @@ def create_app(config=None, testing=False, app_name="Airflow"):
     with app.app_context():
 
         from airflow.www_rbac.security import AirflowSecurityManager
-        security_manager_class = app.config.get('SECURITY_MANAGER_CLASS') or AirflowSecurityManager
+        security_manager_class = app.config.get('SECURITY_MANAGER_CLASS') or \
+            AirflowSecurityManager
 
         if not issubclass(security_manager_class, AirflowSecurityManager):
             raise Exception(
                 """Your CUSTOM_SECURITY_MANAGER must now extend AirflowSecurityManager,
                  not FAB's security manager.""")
-
 
         appbuilder = AppBuilder(
             app,
@@ -140,7 +139,6 @@ def create_app(config=None, testing=False, app_name="Airflow"):
 
         security_manager = appbuilder.sm
         security_manager.sync_roles()
-
 
         from airflow.www_rbac.api.experimental import endpoints as e
         # required for testing purposes otherwise the module retains

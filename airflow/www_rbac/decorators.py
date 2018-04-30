@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -108,28 +108,32 @@ def has_dag_access(**dag_kwargs):
             # if it is false, we need to check whether user has write access on the dag
             can_dag_edit = dag_kwargs.get('can_dag_edit', False)
             if dag_id is None or (not can_dag_edit and not can_dag_read):
-                # this request is not dag-level related or no read/write level access perm required
+                # this request is not dag-level related
+                # or no read/write level access perm required
                 return f(self, *args, **kwargs)
 
-            # check whether the role of user has all_dag write perm(no need to check read perm)
+            # check whether the role of user has all_dag write perm
+            # (no need to check read perm)
             if can_dag_edit:
-                if self.appbuilder.sm.has_access('can_dag_edit', 'all_dags') or \
-                  self.appbuilder.sm.has_access('can_dag_edit', request.args.get('dag_id')):
+                if self.appbuilder.sm.has_access('can_dag_edit', 'all_dags') \
+                        or self.appbuilder.sm.has_access('can_dag_edit', dag_id):
                     return f(self, *args, **kwargs)
                 else:
                     flash(as_unicode(FLAMSG_ERR_SEC_ACCESS_DENIED), "danger")
-                    return redirect(url_for(self.appbuilder.sm.auth_view.__class__.__name__ + ".login"))
+                    return redirect(url_for(self.appbuilder
+                                            .sm.auth_view.__class__.__name__ + ".login"))
             # check whether the role of user has read perm
             elif can_dag_read:
                 if self.appbuilder.sm.has_access('can_dag_read', 'all_dags') or \
-                  self.appbuilder.sm.has_access('can_dag_read', request.args.get('dag_id')):
+                        self.appbuilder.sm.has_access('can_dag_read', dag_id):
                     return f(self, *args, **kwargs)
-                elif self.appbuilder.sm.has_access('can_dag_edit', 'all_dags') or \
-                  self.appbuilder.sm.has_access('can_dag_edit', request.args.get('dag_id')):
+                elif self.appbuilder.sm.has_access('can_dag_edit', 'all_dags') \
+                        or self.appbuilder.sm.has_access('can_dag_edit', dag_id):
                     # have write access on the dag auto have read access
                     return f(self, *args, **kwargs)
                 else:
                     flash(as_unicode(FLAMSG_ERR_SEC_ACCESS_DENIED), "danger")
-                    return redirect(url_for(self.appbuilder.sm.auth_view.__class__.__name__ + ".login"))
+                    return redirect(url_for(self.appbuilder
+                                            .sm.auth_view.__class__.__name__ + ".login"))
         return wrapper
     return decorator

@@ -7,15 +7,16 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+#
 
 import logging
 from flask import g
@@ -24,7 +25,8 @@ from flask_appbuilder.security.sqla.manager import SecurityManager
 from flask_appbuilder.security.sqla.models import assoc_permissionview_role
 from sqlalchemy import or_
 
-from airflow import models
+from airflow import models, settings
+from airflow.www_rbac.app import appbuilder
 
 ###########################################################################
 #                               VIEW MENUS
@@ -147,7 +149,7 @@ ROLE_CONFIGS = [
     {
         'role': 'Op',
         'perms': viewer_perms | user_perms | op_perms | dag_perms,
-        'vms': viewer_vms | dag_vms | user_vms| op_vms,
+        'vms': viewer_vms | dag_vms | user_vms | op_vms,
     },
 ]
 
@@ -186,18 +188,55 @@ class AirflowSecurityManager(SecurityManager):
         self.get_session.merge(role)
         self.get_session.commit()
 
-    def get_accessible_dag_ids(self, user=None):
+    def get_user_roles(self):
         """
-        Return a list of dags that user has access to. If the user has "all_dag" access, return an empty list.
+        Get all the roles associated with the user.
+        """
+        if g.user.is_anonymous():
+            public_role = appbuilder.config.get('AUTH_ROLE_PUBLIC')
+            return [appbuilder.security_manager.find_role(public_role)] \
+                if public_role else []
+        return g.user.roles
 
-        :param user: Name of the user.
-        :return: A list of dag ids that user has access to.
+    def get_all_permissions_views(self):
         """
-        pass
+        Returns a set of tuples with the perm name and view menu name
+        """
+        perms_views = set()
+        for role in self.get_user_roles():
+            for perm_view in role.permissions:
+                perms_views.add((perm_view.permission.name, perm_view.view_menu.name))
+        return perms_views
+
+    def get_accessible_dag_ids(self, username=None):
+        """
+        Return a set of dags that user has access to(either read or write).
+
+        :param username: Name of the user.
+        :return: A set of dag ids that the user could access.
+        """
+        if not username:
+            username = g.user
+        if g.user.is_anonymous() or 'Public' in g.user.roles:
+            # return an empty list if the role is public
+            return set()
+
+        roles = [role.name for role in g.user.roles]
+
+        if 'Admin' in roles or \
+            'Viewer' in roles or \
+                'User' in roles or 'Op' in roles:
+            # return 'all_dags' vms
+            return dag_vms
+
+        user_perms_views = self.get_all_permissions_views()
+        # return all dags that the user could access
+        return set([view for perm, view in user_perms_views if perm in dag_perms])
 
     def has_access(self, permission, view_name, user=None):
         """
-        Verify whether a given user could perform certain permission(e.g can_read, can_write) on the given dag_id.
+        Verify whether a given user could perform certain permission
+        (e.g can_read, can_write) on the given dag_id.
 
         :param str permission: permission on dag_id(e.g can_read, can_edit).
         :param str view_name: name of view-menu(e.g dag id is a view-menu as well).
@@ -231,7 +270,8 @@ class AirflowSecurityManager(SecurityManager):
     def _merge_perm(self, permission_name, view_menu_name):
         """
         Add the new permission , view_menu to ab_permission_view_role if not exists.
-        It will add the related entry to ab_permission and ab_view_menu two meta tables as well.
+        It will add the related entry to ab_permission
+        and ab_view_menu two meta tables as well.
 
         :param str permission_name: Name of the permission.
         :param str view_menu_name: Name of the view-menu
@@ -252,7 +292,8 @@ class AirflowSecurityManager(SecurityManager):
         Workflow:
         1. when scheduler found a new dag, we will create an entry in ab_view_menu
         2. we fetch all the roles associated with dag users.
-        3. we join and create all the entries for ab_permission_view_menu(predefined permissions * dag-view_menus)
+        3. we join and create all the entries for ab_permission_view_menu
+           (predefined permissions * dag-view_menus)
         4. Create all the missing role-permission-views for the ab_role_permission_views
 
         :return: None.
@@ -276,7 +317,7 @@ class AirflowSecurityManager(SecurityManager):
                 merge_pv(perm, dag)
 
         # Get all the active / paused dags and insert them into a set
-        all_dags_models = self.get_session.query(models.DagModel)\
+        all_dags_models = settings.Session.query(models.DagModel)\
             .filter(or_(models.DagModel.is_active, models.DagModel.is_paused))\
             .filter(~models.DagModel.is_subdag).all()
 
@@ -284,7 +325,8 @@ class AirflowSecurityManager(SecurityManager):
             for perm in dag_perms:
                 merge_pv(perm, dag.dag_id)
 
-        # for all the dag-level role, add the permission of viewer with the dag view to ab_permission_view
+        # for all the dag-level role, add the permission of viewer
+        # with the dag view to ab_permission_view
         all_roles = self.get_all_roles()
         user_role = self.find_role('User')
 
@@ -298,11 +340,12 @@ class AirflowSecurityManager(SecurityManager):
         view_menu = self.viewmenu_model
 
         # todo(tao) comment on the query
-        all_perm_view_by_user = self.get_session.query(ab_perm_view_role)\
-                .join(perm_view, perm_view.id == ab_perm_view_role.columns.permission_view_id)\
-                .filter(ab_perm_view_role.columns.role_id == user_role.id)\
-                .join(view_menu)\
-                .filter(perm_view.view_menu_id != dag_vm.id)
+        all_perm_view_by_user = settings.Session.query(ab_perm_view_role)\
+            .join(perm_view, perm_view.id == ab_perm_view_role
+                  .columns.permission_view_id)\
+            .filter(ab_perm_view_role.columns.role_id == user_role.id)\
+            .join(view_menu)\
+            .filter(perm_view.view_menu_id != dag_vm.id)
         all_perm_views = set([role.permission_view_id for role in all_perm_view_by_user])
 
         for role in dag_role:
@@ -310,18 +353,21 @@ class AirflowSecurityManager(SecurityManager):
             existing_perm_view_by_user = self.get_session.query(ab_perm_view_role)\
                 .filter(ab_perm_view_role.columns.role_id == role.id)
 
-            existing_perms_views = set([role.permission_view_id for role in existing_perm_view_by_user])
+            existing_perms_views = set([role.permission_view_id
+                                        for role in existing_perm_view_by_user])
             missing_perm_views = all_perm_views - existing_perms_views
 
             for perm_view_id in missing_perm_views:
-                update_perm_views.append({'permission_view_id': perm_view_id, 'role_id': role.id})
+                update_perm_views.append({'permission_view_id': perm_view_id,
+                                          'role_id': role.id})
 
         self.get_session.execute(ab_perm_view_role.insert(), update_perm_views)
         self.get_session.commit()
 
     def update_admin_perm_view(self):
         """
-        Admin should have all the permission-views. Add the missing ones to the table for admin.
+        Admin should have all the permission-views.
+        Add the missing ones to the table for admin.
 
         :return: None.
         """
@@ -338,7 +384,8 @@ class AirflowSecurityManager(SecurityManager):
 
     def sync_roles(self):
         """
-        1. Init the default role(Admin, Viewer, User, Op, public) with related permissions.
+        1. Init the default role(Admin, Viewer, User, Op, public)
+           with related permissions.
         2. Init the custom role(dag-user) with related permissions.
 
         :return: None.
