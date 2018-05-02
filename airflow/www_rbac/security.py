@@ -188,15 +188,17 @@ class AirflowSecurityManager(SecurityManager):
         self.get_session.merge(role)
         self.get_session.commit()
 
-    def get_user_roles(self):
+    def get_user_roles(self, user=None):
         """
         Get all the roles associated with the user.
         """
-        if g.user.is_anonymous():
+        if user is None:
+            user = g.user
+        if user.is_anonymous():
             public_role = appbuilder.config.get('AUTH_ROLE_PUBLIC')
             return [appbuilder.security_manager.find_role(public_role)] \
                 if public_role else []
-        return g.user.roles
+        return user.roles
 
     def get_all_permissions_views(self):
         """
@@ -217,16 +219,13 @@ class AirflowSecurityManager(SecurityManager):
         """
         if not username:
             username = g.user
-        if g.user.is_anonymous() or 'Public' in g.user.roles:
+
+        if username.is_anonymous() or 'Public' in username.roles:
             # return an empty list if the role is public
             return set()
 
-        roles = [role.name for role in g.user.roles]
-
-        if 'Admin' in roles or \
-            'Viewer' in roles or \
-                'User' in roles or 'Op' in roles:
-            # return 'all_dags' vms
+        roles = {role.name for role in username.roles}
+        if {'Admin', 'Viewer', 'User', 'Op'} & roles:
             return dag_vms
 
         user_perms_views = self.get_all_permissions_views()

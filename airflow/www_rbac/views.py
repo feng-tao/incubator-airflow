@@ -239,32 +239,31 @@ class Airflow(AirflowBaseView):
 
         filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
 
-        if not filter_dag_ids:
-            return wwwutils.json_response({})
-
-        data = {}
-        for dag_id, state, count in qry:
-            if filter_dag_ids == {'all_dags'} or dag_id in filter_dag_ids:
+        payload = {}
+        if filter_dag_ids:
+            if filter_dag_ids != {'all_dags'}:
+                qry = qry.filter(ds.dag_id.in_(filter_dag_ids))
+            data = {}
+            for dag_id, state, count in qry:
                 if dag_id not in data:
                     data[dag_id] = {}
                 data[dag_id][state] = count
 
-        payload = {}
-        for dag in dagbag.dags.values():
-            if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
-                payload[dag.safe_dag_id] = []
-                for state in State.dag_states:
-                    try:
-                        count = data[dag.dag_id][state]
-                    except Exception:
-                        count = 0
-                    d = {
-                        'state': state,
-                        'count': count,
-                        'dag_id': dag.dag_id,
-                        'color': State.color(state)
-                    }
-                    payload[dag.safe_dag_id].append(d)
+            for dag in dagbag.dags.values():
+                if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
+                    payload[dag.safe_dag_id] = []
+                    for state in State.dag_states:
+                        try:
+                            count = data[dag.dag_id][state]
+                        except Exception:
+                            count = 0
+                        d = {
+                            'state': state,
+                            'count': count,
+                            'dag_id': dag.dag_id,
+                            'color': State.color(state)
+                        }
+                        payload[dag.safe_dag_id].append(d)
         return wwwutils.json_response(payload)
 
     @expose('/task_stats')
@@ -276,72 +275,71 @@ class Airflow(AirflowBaseView):
         Dag = models.DagModel
 
         filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
-        if not filter_dag_ids:
-            return wwwutils.json_response({})
-
-        LastDagRun = (
-            session.query(
-                        DagRun.dag_id,
-                        sqla.func.max(DagRun.execution_date).label('execution_date'))
-                   .join(Dag, Dag.dag_id == DagRun.dag_id)
-                   .filter(DagRun.state != State.RUNNING)
-                   .filter(Dag.is_active == True)  # noqa
-                   .group_by(DagRun.dag_id)
-                   .subquery('last_dag_run')
-        )
-        RunningDagRun = (
-            session.query(DagRun.dag_id, DagRun.execution_date)
-                   .join(Dag, Dag.dag_id == DagRun.dag_id)
-                   .filter(DagRun.state == State.RUNNING)
-                   .filter(Dag.is_active == True)  # noqa
-                   .subquery('running_dag_run')
-        )
-
-        # Select all task_instances from active dag_runs.
-        # If no dag_run is active, return task instances from most recent dag_run.
-        LastTI = (
-            session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
-                   .join(LastDagRun,
-                         and_(LastDagRun.c.dag_id == TI.dag_id,
-                              LastDagRun.c.execution_date == TI.execution_date))
-        )
-        RunningTI = (
-            session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
-                   .join(RunningDagRun,
-                         and_(RunningDagRun.c.dag_id == TI.dag_id,
-                              RunningDagRun.c.execution_date == TI.execution_date))
-        )
-
-        UnionTI = union_all(LastTI, RunningTI).alias('union_ti')
-        qry = (
-            session.query(UnionTI.c.dag_id, UnionTI.c.state, sqla.func.count())
-                   .group_by(UnionTI.c.dag_id, UnionTI.c.state)
-        )
-
-        data = {}
-        for dag_id, state, count in qry:
-            if filter_dag_ids == {'all_dags'} or dag_id in filter_dag_ids:
-                if dag_id not in data:
-                    data[dag_id] = {}
-                data[dag_id][state] = count
-        session.commit()
 
         payload = {}
-        for dag in dagbag.dags.values():
-            if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
-                payload[dag.safe_dag_id] = []
-                for state in State.task_states:
-                    try:
-                        count = data[dag.dag_id][state]
-                    except Exception:
-                        count = 0
-                    d = {
-                        'state': state,
-                        'count': count,
-                        'dag_id': dag.dag_id,
-                        'color': State.color(state)
-                    }
-                    payload[dag.safe_dag_id].append(d)
+        if filter_dag_ids:
+            LastDagRun = (
+                session.query(
+                            DagRun.dag_id,
+                            sqla.func.max(DagRun.execution_date).label('execution_date'))
+                       .join(Dag, Dag.dag_id == DagRun.dag_id)
+                       .filter(DagRun.state != State.RUNNING)
+                       .filter(Dag.is_active == True)  # noqa
+                       .group_by(DagRun.dag_id)
+                       .subquery('last_dag_run')
+            )
+            RunningDagRun = (
+                session.query(DagRun.dag_id, DagRun.execution_date)
+                       .join(Dag, Dag.dag_id == DagRun.dag_id)
+                       .filter(DagRun.state == State.RUNNING)
+                       .filter(Dag.is_active == True)  # noqa
+                       .subquery('running_dag_run')
+            )
+
+            # Select all task_instances from active dag_runs.
+            # If no dag_run is active, return task instances from most recent dag_run.
+            LastTI = (
+                session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
+                       .join(LastDagRun,
+                             and_(LastDagRun.c.dag_id == TI.dag_id,
+                                  LastDagRun.c.execution_date == TI.execution_date))
+            )
+            RunningTI = (
+                session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
+                       .join(RunningDagRun,
+                             and_(RunningDagRun.c.dag_id == TI.dag_id,
+                                  RunningDagRun.c.execution_date == TI.execution_date))
+            )
+
+            UnionTI = union_all(LastTI, RunningTI).alias('union_ti')
+            qry = (
+                session.query(UnionTI.c.dag_id, UnionTI.c.state, sqla.func.count())
+                       .group_by(UnionTI.c.dag_id, UnionTI.c.state)
+            )
+
+            data = {}
+            for dag_id, state, count in qry:
+                if filter_dag_ids == {'all_dags'} or dag_id in filter_dag_ids:
+                    if dag_id not in data:
+                        data[dag_id] = {}
+                    data[dag_id][state] = count
+            session.commit()
+
+            for dag in dagbag.dags.values():
+                if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
+                    payload[dag.safe_dag_id] = []
+                    for state in State.task_states:
+                        try:
+                            count = data[dag.dag_id][state]
+                        except Exception:
+                            count = 0
+                        d = {
+                            'state': state,
+                            'count': count,
+                            'dag_id': dag.dag_id,
+                            'color': State.color(state)
+                        }
+                        payload[dag.safe_dag_id].append(d)
         return wwwutils.json_response(payload)
 
     @expose('/code')
@@ -788,18 +786,20 @@ class Airflow(AirflowBaseView):
     def blocked(self, session=None):
         DR = models.DagRun
         filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
-        if not filter_dag_ids:
-            return wwwutils.json_response({})
 
-        dags = (
-            session.query(DR.dag_id, sqla.func.count(DR.id))
-                   .filter(DR.state == State.RUNNING)
-                   .group_by(DR.dag_id)
-                   .all()
-        )
         payload = []
-        for dag_id, active_dag_runs in dags:
-            if filter_dag_ids == {'all_dags'} or dag_id in filter_dag_ids:
+        if filter_dag_ids:
+            dags = (
+                session.query(DR.dag_id, sqla.func.count(DR.id))
+                       .filter(DR.state == State.RUNNING)
+                       .group_by(DR.dag_id)
+
+            )
+            if filter_dag_ids != {'all_dags'}:
+                dags = dags.filter(DR.dag_id.in_(filter_dag_ids))
+            dags = dags.all()
+
+            for dag_id, active_dag_runs in dags:
                 max_active_runs = 0
                 if dag_id in dagbag.dags:
                     max_active_runs = dagbag.dags[dag_id].max_active_runs
@@ -1819,7 +1819,6 @@ class VariableModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
-    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1830,7 +1829,6 @@ class VariableModelView(AirflowModelView):
         var_dict = {}
         d = json.JSONDecoder()
         for var in items:
-            val = None
             try:
                 val = d.decode(var.val)
             except Exception:

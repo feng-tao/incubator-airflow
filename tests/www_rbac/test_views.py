@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -347,7 +347,7 @@ class TestAirflowBaseViews(TestBase):
         self.check_content_in_response('example_bash_operator', resp)
 
     def test_landing_times(self):
-        url = 'landing_times?days=30&dag_id=test_example_bash_operator'
+        url = 'landing_times?days=30&dag_id=example_bash_operator'
         resp = self.client.get(url, follow_redirects=True)
         self.check_content_in_response('example_bash_operator', resp)
 

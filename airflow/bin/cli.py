@@ -1239,6 +1239,9 @@ def create_user(args):
         if password != password_confirmation:
             raise SystemExit('Passwords did not match!')
 
+    if appbuilder.sm.find_user(args.username):
+        print('{} already exist in the db'.format(args.username))
+        return
     user = appbuilder.sm.add_user(args.username, args.firstname, args.lastname,
                                   args.email, role, password)
     if user:

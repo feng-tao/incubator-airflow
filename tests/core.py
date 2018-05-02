@@ -59,7 +59,7 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.hooks.base_hook import BaseHook
 from airflow.hooks.sqlite_hook import SqliteHook
 from airflow.bin import cli
-from airflow.www import app as application
+from airflow.www_rbac import app as application
 from airflow.settings import Session
 from airflow.utils import timezone
 from airflow.utils.timezone import datetime
@@ -980,8 +980,10 @@ class CliTests(unittest.TestCase):
     def setUp(self):
         super(CliTests, self).setUp()
         configuration.load_test_config()
-        app = application.create_app()
-        app.config['TESTING'] = True
+        self.app, self.appbuilder = application.create_app(testing=True)
+        self.app.config['WTF_CSRF_ENABLED'] = False
+        self.client = self.app.test_client()
+        self.session = Session()
         self.parser = cli.CLIFactory.get_parser()
         self.dagbag = models.DagBag(dag_folder=DEV_NULL, include_examples=True)
         self.session = Session()
