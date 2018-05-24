@@ -23,6 +23,7 @@ from past.builtins import unicode
 import logging
 import os
 import socket
+from dateutil import tz
 from datetime import datetime, timedelta
 import copy
 import math
@@ -69,11 +70,11 @@ from airflow.utils.dates import infer_time_unit, scale_time_units
 
 
 from airflow.www_rbac import utils as wwwutils
-from airflow.www_rbac.app import app
-from airflow.www_rbac.decorators import action_logging, gzipped
+from airflow.www_rbac.app import app, appbuilder
+from airflow.www_rbac.decorators import action_logging, gzipped, has_dag_access
+from airflow.www_rbac.filters import DagFilter
 from airflow.www_rbac.forms import (DateTimeForm, DateTimeWithNumRunsForm,
                                     DagRunForm, ConnectionForm)
-from airflow.www_rbac.security import is_view_only
 from airflow.www_rbac.widgets import AirflowModelListWidget
 
 PAGE_SIZE = conf.getint('webserver', 'page_size')
@@ -133,9 +134,8 @@ class Airflow(AirflowBaseView):
         if hide_paused:
             sql_query = sql_query.filter(~DM.is_paused)
 
-        orm_dags = {dag.dag_id: dag for dag
-                    in sql_query
-                    .all()}
+        # Get all the dag id the user could access
+        filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
 
         import_errors = session.query(models.ImportError).all()
         for ie in import_errors:
@@ -152,6 +152,20 @@ class Airflow(AirflowBaseView):
         else:
             unfiltered_webserver_dags = [dag for dag in dagbag.dags.values() if
                                          not dag.parent_dag]
+
+        if not filter_dag_ids:
+            orm_dags = {}
+            unfiltered_webserver_dags = []
+        elif filter_dag_ids == {'all_dags'}:
+            orm_dags = {dag.dag_id: dag for dag
+                        in sql_query
+                        .all()}
+        else:
+            orm_dags = {dag.dag_id: dag for dag in
+                        sql_query.filter(DM.dag_id.in_(filter_dag_ids)).all()}
+            unfiltered_webserver_dags = [dag for dag in
+                                         unfiltered_webserver_dags
+                                         if dag in filter_dag_ids]
 
         webserver_dags = {
             dag.dag_id: dag
@@ -209,8 +223,7 @@ class Airflow(AirflowBaseView):
                                            search=arg_search_query,
                                            showPaused=not hide_paused),
             dag_ids_in_page=page_dag_ids,
-            auto_complete_data=auto_complete_data,
-            view_only=is_view_only(g.user, self.appbuilder))
+            auto_complete_data=auto_complete_data)
 
     @expose('/dag_stats')
     @has_access
@@ -224,27 +237,33 @@ class Airflow(AirflowBaseView):
             session.query(ds.dag_id, ds.state, ds.count)
         )
 
-        data = {}
-        for dag_id, state, count in qry:
-            if dag_id not in data:
-                data[dag_id] = {}
-            data[dag_id][state] = count
+        filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
 
         payload = {}
-        for dag in dagbag.dags.values():
-            payload[dag.safe_dag_id] = []
-            for state in State.dag_states:
-                try:
-                    count = data[dag.dag_id][state]
-                except Exception:
-                    count = 0
-                d = {
-                    'state': state,
-                    'count': count,
-                    'dag_id': dag.dag_id,
-                    'color': State.color(state)
-                }
-                payload[dag.safe_dag_id].append(d)
+        if filter_dag_ids:
+            if filter_dag_ids != {'all_dags'}:
+                qry = qry.filter(ds.dag_id.in_(filter_dag_ids))
+            data = {}
+            for dag_id, state, count in qry:
+                if dag_id not in data:
+                    data[dag_id] = {}
+                data[dag_id][state] = count
+
+            for dag in dagbag.dags.values():
+                if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
+                    payload[dag.safe_dag_id] = []
+                    for state in State.dag_states:
+                        try:
+                            count = data[dag.dag_id][state]
+                        except Exception:
+                            count = 0
+                        d = {
+                            'state': state,
+                            'count': count,
+                            'dag_id': dag.dag_id,
+                            'color': State.color(state)
+                        }
+                        payload[dag.safe_dag_id].append(d)
         return wwwutils.json_response(payload)
 
     @expose('/task_stats')
@@ -255,70 +274,76 @@ class Airflow(AirflowBaseView):
         DagRun = models.DagRun
         Dag = models.DagModel
 
-        LastDagRun = (
-            session.query(
-                        DagRun.dag_id,
-                        sqla.func.max(DagRun.execution_date).label('execution_date'))
-                   .join(Dag, Dag.dag_id == DagRun.dag_id)
-                   .filter(DagRun.state != State.RUNNING)
-                   .filter(Dag.is_active == True)  # noqa
-                   .group_by(DagRun.dag_id)
-                   .subquery('last_dag_run')
-        )
-        RunningDagRun = (
-            session.query(DagRun.dag_id, DagRun.execution_date)
-                   .join(Dag, Dag.dag_id == DagRun.dag_id)
-                   .filter(DagRun.state == State.RUNNING)
-                   .filter(Dag.is_active == True)  # noqa
-                   .subquery('running_dag_run')
-        )
-
-        # Select all task_instances from active dag_runs.
-        # If no dag_run is active, return task instances from most recent dag_run.
-        LastTI = (
-            session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
-                   .join(LastDagRun,
-                         and_(LastDagRun.c.dag_id == TI.dag_id,
-                              LastDagRun.c.execution_date == TI.execution_date))
-        )
-        RunningTI = (
-            session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
-                   .join(RunningDagRun,
-                         and_(RunningDagRun.c.dag_id == TI.dag_id,
-                              RunningDagRun.c.execution_date == TI.execution_date))
-        )
-
-        UnionTI = union_all(LastTI, RunningTI).alias('union_ti')
-        qry = (
-            session.query(UnionTI.c.dag_id, UnionTI.c.state, sqla.func.count())
-                   .group_by(UnionTI.c.dag_id, UnionTI.c.state)
-        )
-
-        data = {}
-        for dag_id, state, count in qry:
-            if dag_id not in data:
-                data[dag_id] = {}
-            data[dag_id][state] = count
-        session.commit()
+        filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
 
         payload = {}
-        for dag in dagbag.dags.values():
-            payload[dag.safe_dag_id] = []
-            for state in State.task_states:
-                try:
-                    count = data[dag.dag_id][state]
-                except Exception:
-                    count = 0
-                d = {
-                    'state': state,
-                    'count': count,
-                    'dag_id': dag.dag_id,
-                    'color': State.color(state)
-                }
-                payload[dag.safe_dag_id].append(d)
+        if filter_dag_ids:
+            LastDagRun = (
+                session.query(
+                            DagRun.dag_id,
+                            sqla.func.max(DagRun.execution_date).label('execution_date'))
+                       .join(Dag, Dag.dag_id == DagRun.dag_id)
+                       .filter(DagRun.state != State.RUNNING)
+                       .filter(Dag.is_active == True)  # noqa
+                       .group_by(DagRun.dag_id)
+                       .subquery('last_dag_run')
+            )
+            RunningDagRun = (
+                session.query(DagRun.dag_id, DagRun.execution_date)
+                       .join(Dag, Dag.dag_id == DagRun.dag_id)
+                       .filter(DagRun.state == State.RUNNING)
+                       .filter(Dag.is_active == True)  # noqa
+                       .subquery('running_dag_run')
+            )
+
+            # Select all task_instances from active dag_runs.
+            # If no dag_run is active, return task instances from most recent dag_run.
+            LastTI = (
+                session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
+                       .join(LastDagRun,
+                             and_(LastDagRun.c.dag_id == TI.dag_id,
+                                  LastDagRun.c.execution_date == TI.execution_date))
+            )
+            RunningTI = (
+                session.query(TI.dag_id.label('dag_id'), TI.state.label('state'))
+                       .join(RunningDagRun,
+                             and_(RunningDagRun.c.dag_id == TI.dag_id,
+                                  RunningDagRun.c.execution_date == TI.execution_date))
+            )
+
+            UnionTI = union_all(LastTI, RunningTI).alias('union_ti')
+            qry = (
+                session.query(UnionTI.c.dag_id, UnionTI.c.state, sqla.func.count())
+                       .group_by(UnionTI.c.dag_id, UnionTI.c.state)
+            )
+
+            data = {}
+            for dag_id, state, count in qry:
+                if filter_dag_ids == {'all_dags'} or dag_id in filter_dag_ids:
+                    if dag_id not in data:
+                        data[dag_id] = {}
+                    data[dag_id][state] = count
+            session.commit()
+
+            for dag in dagbag.dags.values():
+                if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
+                    payload[dag.safe_dag_id] = []
+                    for state in State.task_states:
+                        try:
+                            count = data[dag.dag_id][state]
+                        except Exception:
+                            count = 0
+                        d = {
+                            'state': state,
+                            'count': count,
+                            'dag_id': dag.dag_id,
+                            'color': State.color(state)
+                        }
+                        payload[dag.safe_dag_id].append(d)
         return wwwutils.json_response(payload)
 
     @expose('/code')
+    @has_dag_access(can_dag_read=True)
     @has_access
     def code(self):
         dag_id = request.args.get('dag_id')
@@ -338,6 +363,7 @@ class Airflow(AirflowBaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
     @expose('/dag_details')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @provide_session
     def dag_details(self, session=None):
@@ -374,14 +400,19 @@ class Airflow(AirflowBaseView):
     @has_access
     def pickle_info(self):
         d = {}
+        filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
+        if not filter_dag_ids:
+            return wwwutils.json_response({})
         dag_id = request.args.get('dag_id')
         dags = [dagbag.dags.get(dag_id)] if dag_id else dagbag.dags.values()
         for dag in dags:
-            if not dag.is_subdag:
-                d[dag.dag_id] = dag.pickle_info()
+            if filter_dag_ids == {'all_dags'} or dag.dag_id in filter_dag_ids:
+                if not dag.is_subdag:
+                    d[dag.dag_id] = dag.pickle_info()
         return wwwutils.json_response(d)
 
     @expose('/rendered')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def rendered(self):
@@ -418,6 +449,7 @@ class Airflow(AirflowBaseView):
             title=title, )
 
     @expose('/log')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -459,6 +491,7 @@ class Airflow(AirflowBaseView):
             execution_date=execution_date, form=form)
 
     @expose('/task')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def task(self):
@@ -536,6 +569,7 @@ class Airflow(AirflowBaseView):
             dag=dag, title=title)
 
     @expose('/xcom')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -574,6 +608,7 @@ class Airflow(AirflowBaseView):
             dag=dag, title=title)
 
     @expose('/run')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def run(self):
@@ -632,6 +667,7 @@ class Airflow(AirflowBaseView):
         return redirect(origin)
 
     @expose('/trigger')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def trigger(self):
@@ -697,6 +733,7 @@ class Airflow(AirflowBaseView):
         return response
 
     @expose('/clear')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def clear(self):
@@ -726,6 +763,7 @@ class Airflow(AirflowBaseView):
                                    recursive=recursive, confirmed=confirmed)
 
     @expose('/dagrun_clear')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def dagrun_clear(self):
@@ -747,25 +785,33 @@ class Airflow(AirflowBaseView):
     @provide_session
     def blocked(self, session=None):
         DR = models.DagRun
-        dags = (
-            session.query(DR.dag_id, sqla.func.count(DR.id))
-                   .filter(DR.state == State.RUNNING)
-                   .group_by(DR.dag_id)
-                   .all()
-        )
+        filter_dag_ids = appbuilder.sm.get_accessible_dag_ids()
+
         payload = []
-        for dag_id, active_dag_runs in dags:
-            max_active_runs = 0
-            if dag_id in dagbag.dags:
-                max_active_runs = dagbag.dags[dag_id].max_active_runs
-            payload.append({
-                'dag_id': dag_id,
-                'active_dag_run': active_dag_runs,
-                'max_active_runs': max_active_runs,
-            })
+        if filter_dag_ids:
+            dags = (
+                session.query(DR.dag_id, sqla.func.count(DR.id))
+                       .filter(DR.state == State.RUNNING)
+                       .group_by(DR.dag_id)
+
+            )
+            if filter_dag_ids != {'all_dags'}:
+                dags = dags.filter(DR.dag_id.in_(filter_dag_ids))
+            dags = dags.all()
+
+            for dag_id, active_dag_runs in dags:
+                max_active_runs = 0
+                if dag_id in dagbag.dags:
+                    max_active_runs = dagbag.dags[dag_id].max_active_runs
+                payload.append({
+                    'dag_id': dag_id,
+                    'active_dag_run': active_dag_runs,
+                    'max_active_runs': max_active_runs,
+                })
         return wwwutils.json_response(payload)
 
     @expose('/dagrun_success')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def dagrun_success(self):
@@ -803,6 +849,7 @@ class Airflow(AirflowBaseView):
             return response
 
     @expose('/success')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     def success(self):
@@ -855,6 +902,7 @@ class Airflow(AirflowBaseView):
         return response
 
     @expose('/tree')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @gzipped
     @action_logging
@@ -984,6 +1032,7 @@ class Airflow(AirflowBaseView):
             dag=dag, data=data, blur=blur, num_runs=num_runs)
 
     @expose('/graph')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @gzipped
     @action_logging
@@ -1098,6 +1147,7 @@ class Airflow(AirflowBaseView):
             edges=json.dumps(edges, indent=2), )
 
     @expose('/duration')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1205,6 +1255,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/tries')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1269,6 +1320,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/landing_times')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1347,6 +1399,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/paused', methods=['POST'])
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     @provide_session
@@ -1368,6 +1421,7 @@ class Airflow(AirflowBaseView):
         return "OK"
 
     @expose('/refresh')
+    @has_dag_access(can_dag_edit=True)
     @has_access
     @action_logging
     @provide_session
@@ -1387,6 +1441,7 @@ class Airflow(AirflowBaseView):
         return redirect(request.referrer)
 
     @expose('/refresh_all')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     def refresh_all(self):
@@ -1395,6 +1450,7 @@ class Airflow(AirflowBaseView):
         return redirect('/')
 
     @expose('/gantt')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1458,6 +1514,7 @@ class Airflow(AirflowBaseView):
         )
 
     @expose('/object/task_instances')
+    @has_dag_access(can_dag_read=True)
     @has_access
     @action_logging
     @provide_session
@@ -1600,6 +1657,8 @@ class XComModelView(AirflowModelView):
     edit_columns = ['key', 'value', 'execution_date', 'task_id', 'dag_id']
     base_order = ('execution_date', 'desc')
 
+    base_filters = [['dag_id', DagFilter, lambda: []]]
+
     @action('muldelete', 'Delete', "Are you sure you want to delete selected records?",
             single=False)
     def action_muldelete(self, items):
@@ -1632,6 +1691,7 @@ class ConnectionModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1673,6 +1733,7 @@ class PoolModelView(AirflowModelView):
 
     @action('muldelete', 'Delete', 'Are you sure you want to delete selected records?',
             single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_muldelete(self, items):
         self.datamodel.delete_all(items)
         self.update_redirect()
@@ -1768,7 +1829,6 @@ class VariableModelView(AirflowModelView):
         var_dict = {}
         d = json.JSONDecoder()
         for var in items:
-            val = None
             try:
                 val = d.decode(var.val)
             except Exception:
@@ -1815,6 +1875,8 @@ class JobModelView(AirflowModelView):
 
     base_order = ('start_date', 'desc')
 
+    base_filters = [['dag_id', DagFilter, lambda: []]]
+
     formatters_columns = {
         'start_date': wwwutils.datetime_f('start_date'),
         'end_date': wwwutils.datetime_f('end_date'),
@@ -1836,6 +1898,8 @@ class DagRunModelView(AirflowModelView):
 
     base_order = ('execution_date', 'desc')
 
+    base_filters = [['dag_id', DagFilter, lambda: []]]
+
     add_form = edit_form = DagRunForm
 
     formatters_columns = {
@@ -1852,6 +1916,7 @@ class DagRunModelView(AirflowModelView):
 
     @action('muldelete', "Delete", "Are you sure you want to delete selected records?",
             single=False)
+    @has_dag_access(can_dag_edit=True)
     @provide_session
     def action_muldelete(self, items, session=None):
         self.datamodel.delete_all(items)
@@ -1863,14 +1928,17 @@ class DagRunModelView(AirflowModelView):
         models.DagStat.update(dirty_ids, dirty_only=False, session=session)
 
     @action('set_running', "Set state to 'running'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_running(self, drs):
         return self.set_dagrun_state(drs, State.RUNNING)
 
     @action('set_failed', "Set state to 'failed'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_failed(self, drs):
         return self.set_dagrun_state(drs, State.FAILED)
 
     @action('set_success', "Set state to 'success'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_success(self, drs):
         return self.set_dagrun_state(drs, State.SUCCESS)
 
@@ -1911,6 +1979,8 @@ class LogModelView(AirflowModelView):
 
     base_order = ('dttm', 'desc')
 
+    base_filters = [['dag_id', DagFilter, lambda: []]]
+
     formatters_columns = {
         'dttm': wwwutils.datetime_f('dttm'),
         'execution_date': wwwutils.datetime_f('execution_date'),
@@ -1936,6 +2006,8 @@ class TaskInstanceModelView(AirflowModelView):
                       'queue', 'pool', 'operator', 'start_date', 'end_date']
 
     base_order = ('job_id', 'asc')
+
+    base_filters = [['dag_id', DagFilter, lambda: []]]
 
     def log_url_formatter(attr):
         log_url = attr.get('log_url')
@@ -2001,24 +2073,28 @@ class TaskInstanceModelView(AirflowModelView):
             flash('Failed to set state', 'error')
 
     @action('set_running', "Set state to 'running'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_running(self, tis):
         self.set_task_instance_state(tis, State.RUNNING)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_failed', "Set state to 'failed'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_failed(self, tis):
         self.set_task_instance_state(tis, State.FAILED)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_success', "Set state to 'success'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_success(self, tis):
         self.set_task_instance_state(tis, State.SUCCESS)
         self.update_redirect()
         return redirect(self.get_redirect())
 
     @action('set_retry', "Set state to 'up_for_retry'", '', single=False)
+    @has_dag_access(can_dag_edit=True)
     def action_set_retry(self, tis):
         self.set_task_instance_state(tis, State.UP_FOR_RETRY)
         self.update_redirect()
@@ -2050,6 +2126,8 @@ class DagModelView(AirflowModelView):
     formatters_columns = {
         'dag_id': wwwutils.dag_link
     }
+
+    base_filters = [['dag_id', DagFilter, lambda: []]]
 
     def get_query(self):
         """

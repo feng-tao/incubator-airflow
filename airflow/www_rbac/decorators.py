@@ -21,7 +21,9 @@ import gzip
 import functools
 import pendulum
 from io import BytesIO as IO
-from flask import after_this_request, request, g
+from flask import after_this_request, flash, redirect, request, url_for, g
+from flask_appbuilder._compat import as_unicode
+from flask_appbuilder.const import FLAMSG_ERR_SEC_ACCESS_DENIED
 from airflow import models, settings
 
 
@@ -91,3 +93,26 @@ def gzipped(f):
         return f(*args, **kwargs)
 
     return view_func
+
+
+def has_dag_access(**dag_kwargs):
+    """
+    Decorator to check whether the user has read / write permission on the dag.
+    """
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            has_access = self.appbuilder.sm.has_access
+            dag_id = request.args.get('dag_id')
+            # if it is false, we need to check whether user has write access on the dag
+            can_dag_edit = dag_kwargs.get('can_dag_edit', False)
+            if (
+                has_access('can_dag_edit', 'all_dags') or
+                has_access('can_dag_edit', dag_id) or (not can_dag_edit and
+                                                       (has_access('can_dag_read', 'all_dags') or
+                                                        has_access('can_dag_read', dag_id)))):
+                return f(self, *args, **kwargs)
+            else:
+                return redirect(url_for(self.appbuilder.sm.auth_view.__class__.__name__ + ".login"))
+        return wrapper
+    return decorator
