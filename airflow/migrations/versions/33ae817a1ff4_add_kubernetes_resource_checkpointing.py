@@ -21,8 +21,8 @@ Create Date: 2017-09-11 15:26:47.598494
 """
 
 # revision identifiers, used by Alembic.
-revision = '33ae817a1ff4'
-down_revision = 'd2ae31099d61'
+revision = "33ae817a1ff4"
+down_revision = "d2ae31099d61"
 branch_labels = None
 depends_on = None
 
@@ -38,13 +38,10 @@ def upgrade():
         RESOURCE_TABLE,
         sa.Column("one_row_id", sa.Boolean, server_default=sa.true(), primary_key=True),
         sa.Column("resource_version", sa.String(255)),
-        sa.CheckConstraint("one_row_id", name="kube_resource_version_one_row_id")
+        sa.CheckConstraint("one_row_id", name="kube_resource_version_one_row_id"),
     )
-    op.bulk_insert(table, [
-        {"resource_version": ""}
-    ])
+    op.bulk_insert(table, [{"resource_version": ""}])
 
 
 def downgrade():
     op.drop_table(RESOURCE_TABLE)
-

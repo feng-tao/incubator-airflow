@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -35,15 +35,20 @@ class JdbcOperator(BaseOperator):
         Template reference are recognized by str ending in '.sql'
     """
 
-    template_fields = ('sql',)
-    template_ext = ('.sql',)
-    ui_color = '#ededed'
+    template_fields = ("sql",)
+    template_ext = (".sql",)
+    ui_color = "#ededed"
 
     @apply_defaults
     def __init__(
-            self, sql,
-            jdbc_conn_id='jdbc_default', autocommit=False, parameters=None,
-            *args, **kwargs):
+        self,
+        sql,
+        jdbc_conn_id="jdbc_default",
+        autocommit=False,
+        parameters=None,
+        *args,
+        **kwargs
+    ):
         super(JdbcOperator, self).__init__(*args, **kwargs)
         self.parameters = parameters
 
@@ -52,6 +57,6 @@ class JdbcOperator(BaseOperator):
         self.autocommit = autocommit
 
     def execute(self, context):
-        self.log.info('Executing: %s', self.sql)
+        self.log.info("Executing: %s", self.sql)
         self.hook = JdbcHook(jdbc_conn_id=self.jdbc_conn_id)
         self.hook.run(self.sql, self.autocommit, parameters=self.parameters)

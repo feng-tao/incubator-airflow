@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -61,23 +61,25 @@ class PythonOperator(BaseOperator):
         processing templated fields, for examples ``['.sql', '.hql']``
     :type templates_exts: list(str)
     """
-    template_fields = ('templates_dict',)
+    template_fields = ("templates_dict",)
     template_ext = tuple()
-    ui_color = '#ffefeb'
+    ui_color = "#ffefeb"
 
     @apply_defaults
     def __init__(
-            self,
-            python_callable,
-            op_args=None,
-            op_kwargs=None,
-            provide_context=False,
-            templates_dict=None,
-            templates_exts=None,
-            *args, **kwargs):
+        self,
+        python_callable,
+        op_args=None,
+        op_kwargs=None,
+        provide_context=False,
+        templates_dict=None,
+        templates_exts=None,
+        *args,
+        **kwargs
+    ):
         super(PythonOperator, self).__init__(*args, **kwargs)
         if not callable(python_callable):
-            raise AirflowException('`python_callable` param must be callable')
+            raise AirflowException("`python_callable` param must be callable")
         self.python_callable = python_callable
         self.op_args = op_args or []
         self.op_kwargs = op_kwargs or {}
@@ -89,7 +91,7 @@ class PythonOperator(BaseOperator):
     def execute(self, context):
         if self.provide_context:
             context.update(self.op_kwargs)
-            context['templates_dict'] = self.templates_dict
+            context["templates_dict"] = self.templates_dict
             self.op_kwargs = context
 
         return_value = self.execute_callable()
@@ -119,17 +121,18 @@ class BranchPythonOperator(PythonOperator, SkipMixin):
     ``skipped`` states propagates where all directly upstream tasks are
     ``skipped``.
     """
+
     def execute(self, context):
         branch = super(BranchPythonOperator, self).execute(context)
         self.log.info("Following branch %s", branch)
         self.log.info("Marking other directly downstream tasks as skipped")
 
-        downstream_tasks = context['task'].downstream_list
+        downstream_tasks = context["task"].downstream_list
         self.log.debug("Downstream task_ids %s", downstream_tasks)
 
         skip_tasks = [t for t in downstream_tasks if t.task_id != branch]
         if downstream_tasks:
-            self.skip(context['dag_run'], context['ti'].execution_date, skip_tasks)
+            self.skip(context["dag_run"], context["ti"].execution_date, skip_tasks)
 
         self.log.info("Done.")
 
@@ -146,23 +149,25 @@ class ShortCircuitOperator(PythonOperator, SkipMixin):
 
     The condition is determined by the result of `python_callable`.
     """
+
     def execute(self, context):
         condition = super(ShortCircuitOperator, self).execute(context)
         self.log.info("Condition result is %s", condition)
 
         if condition:
-            self.log.info('Proceeding with downstream tasks...')
+            self.log.info("Proceeding with downstream tasks...")
             return
 
-        self.log.info('Skipping downstream tasks...')
+        self.log.info("Skipping downstream tasks...")
 
-        downstream_tasks = context['task'].get_flat_relatives(upstream=False)
+        downstream_tasks = context["task"].get_flat_relatives(upstream=False)
         self.log.debug("Downstream task_ids %s", downstream_tasks)
 
         if downstream_tasks:
-            self.skip(context['dag_run'], context['ti'].execution_date, downstream_tasks)
+            self.skip(context["dag_run"], context["ti"].execution_date, downstream_tasks)
 
         self.log.info("Done.")
+
 
 class PythonVirtualenvOperator(PythonOperator):
     """
@@ -170,7 +175,8 @@ class PythonVirtualenvOperator(PythonOperator):
     automatically (with certain caveats).
 
     The function must be defined using def, and not be part of a class. All imports
-    must happen inside the function and no variables outside of the scope may be referenced.
+    must happen inside the function and no variables
+    outside of the scope may be referenced.
     A global scope variable named virtualenv_string_args will be available (populated by
     string_args). In addition, one can pass stuff through op_args and op_kwargs, and one
     can use a return value.
@@ -186,11 +192,12 @@ class PythonVirtualenvOperator(PythonOperator):
     :param python_version: The Python version to run the virtualenv with. Note that
         both 2 and 2.7 are acceptable forms.
     :type python_version: str
-    :param use_dill: Whether to use dill to serialize the args and result (pickle is default).
-        This allow more complex types but requires you to include dill in your requirements.
+    :param use_dill: Whether to use dill to serialize the args
+        and result (pickle is default). This allow more complex types
+        but requires you to include dill in your requirements.
     :type use_dill: bool
-    :param system_site_packages: Whether to include system_site_packages in your virtualenv.
-        See virtualenv documentation for more information.
+    :param system_site_packages: Whether to include system_site_packages
+        in your virtualenv. See virtualenv documentation for more information.
     :type system_site_packages: bool
     :param op_args: A list of positional arguments to pass to python_callable.
     :type op_kwargs: list
@@ -209,9 +216,22 @@ class PythonVirtualenvOperator(PythonOperator):
         processing templated fields, for examples ``['.sql', '.hql']``
     :type templates_exts: list(str)
     """
-    def __init__(self, python_callable, requirements=None, python_version=None, use_dill=False,
-                 system_site_packages=True, op_args=None, op_kwargs=None, string_args=None,
-                 templates_dict=None, templates_exts=None, *args, **kwargs):
+
+    def __init__(
+        self,
+        python_callable,
+        requirements=None,
+        python_version=None,
+        use_dill=False,
+        system_site_packages=True,
+        op_args=None,
+        op_kwargs=None,
+        string_args=None,
+        templates_dict=None,
+        templates_exts=None,
+        *args,
+        **kwargs
+    ):
         super(PythonVirtualenvOperator, self).__init__(
             python_callable=python_callable,
             op_args=op_args,
@@ -220,39 +240,52 @@ class PythonVirtualenvOperator(PythonOperator):
             templates_exts=templates_exts,
             provide_context=False,
             *args,
-            **kwargs)
+            **kwargs
+        )
         self.requirements = requirements or []
         self.string_args = string_args or []
         self.python_version = python_version
         self.use_dill = use_dill
         self.system_site_packages = system_site_packages
         # check that dill is present if needed
-        dill_in_requirements = map(lambda x: x.lower().startswith('dill'), self.requirements)
+        dill_in_requirements = map(
+            lambda x: x.lower().startswith("dill"), self.requirements
+        )
         if (not system_site_packages) and use_dill and not any(dill_in_requirements):
-            raise AirflowException('If using dill, dill must be in the environment ' +
-                                   'either via system_site_packages or requirements')
+            raise AirflowException(
+                "If using dill, dill must be in the environment " +
+                "either via system_site_packages or requirements"
+            )
         # check that a function is passed, and that it is not a lambda
-        if (not isinstance(self.python_callable, types.FunctionType)
-                or self.python_callable.__name__ == (lambda x: 0).__name__):
-            raise AirflowException('{} only supports functions for python_callable arg',
-                                   self.__class__.__name__)
+        if (
+            not isinstance(self.python_callable, types.FunctionType) or
+            self.python_callable.__name__ == (lambda x: 0).__name__
+        ):
+            raise AirflowException(
+                "{} only supports functions for python_callable arg",
+                self.__class__.__name__,
+            )
         # check that args are passed iff python major version matches
-        if (python_version is not None
-                and str(python_version)[0] != str(sys.version_info[0])
-                and self._pass_op_args()):
-            raise AirflowException("Passing op_args or op_kwargs is not supported across "
-                                   "different Python major versions "
-                                   "for PythonVirtualenvOperator. Please use string_args.")
+        if (
+            python_version is not None and
+            str(python_version)[0] != str(sys.version_info[0]) and
+            self._pass_op_args()
+        ):
+            raise AirflowException(
+                "Passing op_args or op_kwargs is not supported across "
+                "different Python major versions "
+                "for PythonVirtualenvOperator. Please use string_args."
+            )
 
     def execute_callable(self):
-        with TemporaryDirectory(prefix='venv') as tmp_dir:
+        with TemporaryDirectory(prefix="venv") as tmp_dir:
             if self.templates_dict:
-                self.op_kwargs['templates_dict'] = self.templates_dict
+                self.op_kwargs["templates_dict"] = self.templates_dict
             # generate filenames
-            input_filename = os.path.join(tmp_dir, 'script.in')
-            output_filename = os.path.join(tmp_dir, 'script.out')
-            string_args_filename = os.path.join(tmp_dir, 'string_args.txt')
-            script_filename = os.path.join(tmp_dir, 'script.py')
+            input_filename = os.path.join(tmp_dir, "script.in")
+            output_filename = os.path.join(tmp_dir, "script.out")
+            string_args_filename = os.path.join(tmp_dir, "string_args.txt")
+            script_filename = os.path.join(tmp_dir, "script.py")
 
             # set up virtualenv
             self._execute_in_subprocess(self._generate_virtualenv_cmd(tmp_dir))
@@ -266,11 +299,14 @@ class PythonVirtualenvOperator(PythonOperator):
 
             # execute command in virtualenv
             self._execute_in_subprocess(
-                self._generate_python_cmd(tmp_dir,
-                                          script_filename,
-                                          input_filename,
-                                          output_filename,
-                                          string_args_filename))
+                self._generate_python_cmd(
+                    tmp_dir,
+                    script_filename,
+                    input_filename,
+                    output_filename,
+                    string_args_filename,
+                )
+            )
             return self._read_result(output_filename)
 
     def _pass_op_args(self):
@@ -280,9 +316,9 @@ class PythonVirtualenvOperator(PythonOperator):
     def _execute_in_subprocess(self, cmd):
         try:
             self.log.info("Executing cmd\n{}".format(cmd))
-            output = subprocess.check_output(cmd,
-                                             stderr=subprocess.STDOUT,
-                                             close_fds=True)
+            output = subprocess.check_output(
+                cmd, stderr=subprocess.STDOUT, close_fds=True
+            )
             if output:
                 self.log.info("Got output\n{}".format(output))
         except subprocess.CalledProcessError as e:
@@ -291,14 +327,14 @@ class PythonVirtualenvOperator(PythonOperator):
 
     def _write_string_args(self, filename):
         # writes string_args to a file, which are read line by line
-        with open(filename, 'w') as f:
-            f.write('\n'.join(map(str, self.string_args)))
+        with open(filename, "w") as f:
+            f.write("\n".join(map(str, self.string_args)))
 
     def _write_args(self, input_filename):
         # serialize args to file
         if self._pass_op_args():
-            with open(input_filename, 'wb') as f:
-                arg_dict = ({'args': self.op_args, 'kwargs': self.op_kwargs})
+            with open(input_filename, "wb") as f:
+                arg_dict = {"args": self.op_args, "kwargs": self.op_kwargs}
                 if self.use_dill:
                     dill.dump(arg_dict, f)
                 else:
@@ -307,29 +343,31 @@ class PythonVirtualenvOperator(PythonOperator):
     def _read_result(self, output_filename):
         if os.stat(output_filename).st_size == 0:
             return None
-        with open(output_filename, 'rb') as f:
+        with open(output_filename, "rb") as f:
             try:
                 if self.use_dill:
                     return dill.load(f)
                 else:
                     return pickle.load(f)
             except ValueError:
-                self.log.error("Error deserializing result. Note that result deserialization "
-                              "is not supported across major Python versions.")
+                self.log.error(
+                    "Error deserializing result. Note that result deserialization "
+                    "is not supported across major Python versions."
+                )
                 raise
 
     def _write_script(self, script_filename):
-        with open(script_filename, 'w') as f:
+        with open(script_filename, "w") as f:
             python_code = self._generate_python_code()
-            self.log.debug('Writing code to file\n{}'.format(python_code))
+            self.log.debug("Writing code to file\n{}".format(python_code))
             f.write(python_code)
 
     def _generate_virtualenv_cmd(self, tmp_dir):
-        cmd = ['virtualenv', tmp_dir]
+        cmd = ["virtualenv", tmp_dir]
         if self.system_site_packages:
-            cmd.append('--system-site-packages')
+            cmd.append("--system-site-packages")
         if self.python_version is not None:
-            cmd.append('--python=python{}'.format(self.python_version))
+            cmd.append("--python=python{}".format(self.python_version))
         return cmd
 
     def _generate_pip_install_cmd(self, tmp_dir):
@@ -337,28 +375,44 @@ class PythonVirtualenvOperator(PythonOperator):
             return []
         else:
             # direct path alleviates need to activate
-            cmd = ['{}/bin/pip'.format(tmp_dir), 'install']
+            cmd = ["{}/bin/pip".format(tmp_dir), "install"]
             return cmd + self.requirements
 
-    def _generate_python_cmd(self, tmp_dir, script_filename, input_filename, output_filename, string_args_filename):
+    def _generate_python_cmd(
+        self,
+        tmp_dir,
+        script_filename,
+        input_filename,
+        output_filename,
+        string_args_filename,
+    ):
         # direct path alleviates need to activate
-        return ['{}/bin/python'.format(tmp_dir), script_filename, input_filename, output_filename, string_args_filename]
+        return [
+            "{}/bin/python".format(tmp_dir),
+            script_filename,
+            input_filename,
+            output_filename,
+            string_args_filename,
+        ]
 
     def _generate_python_code(self):
         if self.use_dill:
-            pickling_library = 'dill'
+            pickling_library = "dill"
         else:
-            pickling_library = 'pickle'
+            pickling_library = "pickle"
         fn = self.python_callable
         # dont try to read pickle if we didnt pass anything
         if self._pass_op_args():
-            load_args_line = 'with open(sys.argv[1], "rb") as f: arg_dict = {}.load(f)'.format(pickling_library)
+            load_args_line = 'with open(sys.argv[1], "rb") as f: arg_dict = {}.load(f)'\
+                .format(pickling_library)
         else:
             load_args_line = 'arg_dict = {"args": [], "kwargs": {}}'
 
-        # no indents in original code so we can accept any type of indents in the original function
+        # no indents in original code so we can accept any type of
+        # indents in the original function
         # we deserialize args, call function, serialize result if necessary
-        return dedent("""\
+        return dedent(
+            """\
         import {pickling_library}
         import sys
         {load_args_code}
@@ -368,11 +422,12 @@ class PythonVirtualenvOperator(PythonOperator):
         {python_callable_lines}
         res = {python_callable_name}(*args, **kwargs)
         with open(sys.argv[2], 'wb') as f: res is not None and {pickling_library}.dump(res, f)
-        """).format(
-                load_args_code=load_args_line,
-                python_callable_lines=dedent(inspect.getsource(fn)),
-                python_callable_name=fn.__name__,
-                pickling_library=pickling_library)
+        """
+        ).format(
+            load_args_code=load_args_line,
+            python_callable_lines=dedent(inspect.getsource(fn)),
+            python_callable_name=fn.__name__,
+            pickling_library=pickling_library,
+        )
 
         self.log.info("Done.")
-
