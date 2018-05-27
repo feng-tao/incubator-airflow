@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -67,23 +67,25 @@ class MsSqlToHiveTransfer(BaseOperator):
     :type tblproperties: dict
     """
 
-    template_fields = ('sql', 'partition', 'hive_table')
-    template_ext = ('.sql',)
-    ui_color = '#a0e08c'
+    template_fields = ("sql", "partition", "hive_table")
+    template_ext = (".sql",)
+    ui_color = "#a0e08c"
 
     @apply_defaults
     def __init__(
-            self,
-            sql,
-            hive_table,
-            create=True,
-            recreate=False,
-            partition=None,
-            delimiter=chr(1),
-            mssql_conn_id='mssql_default',
-            hive_cli_conn_id='hive_cli_default',
-            tblproperties=None,
-            *args, **kwargs):
+        self,
+        sql,
+        hive_table,
+        create=True,
+        recreate=False,
+        partition=None,
+        delimiter=chr(1),
+        mssql_conn_id="mssql_default",
+        hive_cli_conn_id="hive_cli_default",
+        tblproperties=None,
+        *args,
+        **kwargs
+    ):
         super(MsSqlToHiveTransfer, self).__init__(*args, **kwargs)
         self.sql = sql
         self.hive_table = hive_table
@@ -99,12 +101,8 @@ class MsSqlToHiveTransfer(BaseOperator):
     @classmethod
     def type_map(cls, mssql_type):
         t = pymssql
-        d = {
-            t.BINARY.value: 'INT',
-            t.DECIMAL.value: 'FLOAT',
-            t.NUMBER.value: 'INT',
-        }
-        return d[mssql_type] if mssql_type in d else 'STRING'
+        d = {t.BINARY.value: "INT", t.DECIMAL.value: "FLOAT", t.NUMBER.value: "INT"}
+        return d[mssql_type] if mssql_type in d else "STRING"
 
     def execute(self, context):
         hive = HiveCliHook(hive_cli_conn_id=self.hive_cli_conn_id)
@@ -115,13 +113,15 @@ class MsSqlToHiveTransfer(BaseOperator):
         cursor = conn.cursor()
         cursor.execute(self.sql)
         with NamedTemporaryFile("w") as f:
-            csv_writer = csv.writer(f, delimiter=self.delimiter, encoding='utf-8')
+            csv_writer = csv.writer(f, delimiter=self.delimiter, encoding="utf-8")
             field_dict = OrderedDict()
             col_count = 0
             for field in cursor.description:
                 col_count += 1
                 col_position = "Column{position}".format(position=col_count)
-                field_dict[col_position if field[0] == '' else field[0]] = self.type_map(field[1])
+                field_dict[col_position if field[0] == "" else field[0]] = self.type_map(
+                    field[1]
+                )
             csv_writer.writerows(cursor)
             f.flush()
             cursor.close()
@@ -135,4 +135,5 @@ class MsSqlToHiveTransfer(BaseOperator):
                 partition=self.partition,
                 delimiter=self.delimiter,
                 recreate=self.recreate,
-                tblproperties=self.tblproperties)
+                tblproperties=self.tblproperties,
+            )

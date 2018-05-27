@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -25,8 +25,8 @@ Create Date: 2017-06-19 16:53:12.851141
 """
 
 # revision identifiers, used by Alembic.
-revision = 'cc1e65623dc7'
-down_revision = '127d2bf2dfa7'
+revision = "cc1e65623dc7"
+down_revision = "127d2bf2dfa7"
 branch_labels = None
 depends_on = None
 
@@ -40,8 +40,9 @@ BATCH_SIZE = 5000
 
 
 def upgrade():
-    op.add_column('task_instance', sa.Column('max_tries', sa.Integer,
-        server_default="-1"))
+    op.add_column(
+        "task_instance", sa.Column("max_tries", sa.Integer, server_default="-1")
+    )
     # Check if table task_instance exist before data migration. This check is
     # needed for database that does not create table until migration finishes.
     # Checking task_instance table exists prevent the error of querying
@@ -50,7 +51,7 @@ def upgrade():
     inspector = Inspector.from_engine(connection)
     tables = inspector.get_table_names()
 
-    if 'task_instance' in tables:
+    if "task_instance" in tables:
         # Get current session
         sessionmaker = sa.orm.sessionmaker()
         session = sessionmaker(bind=connection)
@@ -61,9 +62,12 @@ def upgrade():
         # Separate db query in batch to prevent loading entire table
         # into memory and cause out of memory error.
         while query.scalar():
-            tis = session.query(TaskInstance).filter(
-                TaskInstance.max_tries == -1
-            ).limit(BATCH_SIZE).all()
+            tis = (
+                session.query(TaskInstance)
+                .filter(TaskInstance.max_tries == -1)
+                .limit(BATCH_SIZE)
+                .all()
+            )
             for ti in tis:
                 dag = dagbag.get_dag(ti.dag_id)
                 if not dag or not dag.has_task(ti.task_id):
@@ -88,7 +92,7 @@ def upgrade():
 
 def downgrade():
     engine = settings.engine
-    if engine.dialect.has_table(engine, 'task_instance'):
+    if engine.dialect.has_table(engine, "task_instance"):
         connection = op.get_bind()
         sessionmaker = sa.orm.sessionmaker()
         session = sessionmaker(bind=connection)
@@ -97,9 +101,12 @@ def downgrade():
             TaskInstance.max_tries != -1
         )
         while query.scalar():
-            tis = session.query(TaskInstance).filter(
-                TaskInstance.max_tries != -1
-            ).limit(BATCH_SIZE).all()
+            tis = (
+                session.query(TaskInstance)
+                .filter(TaskInstance.max_tries != -1)
+                .limit(BATCH_SIZE)
+                .all()
+            )
             for ti in tis:
                 dag = dagbag.get_dag(ti.dag_id)
                 if not dag or not dag.has_task(ti.task_id):
@@ -110,10 +117,11 @@ def downgrade():
                     # left to retry by itself. So the current try_number should be
                     # max number of self retry (task.retries) minus number of
                     # times left for task instance to try the task.
-                    ti.try_number = max(0, task.retries - (ti.max_tries -
-                        ti.try_number))
+                    ti.try_number = max(
+                        0, task.retries - (ti.max_tries - ti.try_number)
+                    )
                 ti.max_tries = -1
                 session.merge(ti)
             session.commit()
         session.commit()
-    op.drop_column('task_instance', 'max_tries')
+    op.drop_column("task_instance", "max_tries")

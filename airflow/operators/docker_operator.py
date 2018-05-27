@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -32,9 +32,11 @@ class DockerOperator(BaseOperator):
     """
     Execute a command inside a docker container.
 
-    A temporary directory is created on the host and mounted into a container to allow storing files
-    that together exceed the default disk size of 10GB in a container. The path to the mounted
-    directory can be accessed via the environment variable ``AIRFLOW_TMP_DIR``.
+    A temporary directory is created on the host and
+    mounted into a container to allow storing files
+    that together exceed the default disk size of 10GB in a container.
+    The path to the mounted directory can be accessed via
+    the environment variable ``AIRFLOW_TMP_DIR``.
 
     If a login to a private registry is required prior to pulling the image, a
     Docker connection needs to be configured in Airflow and the connection ID
@@ -58,70 +60,75 @@ class DockerOperator(BaseOperator):
     :type environment: dict
     :param force_pull: Pull the docker image on every run. Default is false.
     :type force_pull: bool
-    :param mem_limit: Maximum amount of memory the container can use. Either a float value, which
-        represents the limit in bytes, or a string like ``128m`` or ``1g``.
+    :param mem_limit: Maximum amount of memory the container can use.
+        Either a float value, which represents the limit in bytes,
+        or a string like ``128m`` or ``1g``.
     :type mem_limit: float or str
     :param network_mode: Network mode for the container.
     :type network_mode: str
-    :param tls_ca_cert: Path to a PEM-encoded certificate authority to secure the docker connection.
+    :param tls_ca_cert: Path to a PEM-encoded certificate authority
+        to secure the docker connection.
     :type tls_ca_cert: str
-    :param tls_client_cert: Path to the PEM-encoded certificate used to authenticate docker client.
+    :param tls_client_cert: Path to the PEM-encoded certificate
+        used to authenticate docker client.
     :type tls_client_cert: str
     :param tls_client_key: Path to the PEM-encoded key used to authenticate docker client.
     :type tls_client_key: str
-    :param tls_hostname: Hostname to match against the docker server certificate or False to
-        disable the check.
+    :param tls_hostname: Hostname to match against
+        the docker server certificate or False to disable the check.
     :type tls_hostname: str or bool
     :param tls_ssl_version: Version of SSL to use when communicating with docker daemon.
     :type tls_ssl_version: str
-    :param tmp_dir: Mount point inside the container to a temporary directory created on the host by
-        the operator. The path is also made available via the environment variable
-        ``AIRFLOW_TMP_DIR`` inside the container.
+    :param tmp_dir: Mount point inside the container to a temporary directory
+        created on the host by the operator. The path is also made available
+        via the environment variable ``AIRFLOW_TMP_DIR`` inside the container.
     :type tmp_dir: str
     :param user: Default user inside the docker container.
     :type user: int or str
     :param volumes: List of volumes to mount into the container, e.g.
         ``['/host/path:/container/path', '/host/path2:/container/path2:ro']``.
-    :param working_dir: Working directory to set on the container (equivalent to the -w switch
-        the docker client)
+    :param working_dir: Working directory to set on the container
+        (equivalent to the -w switch the docker client)
     :type working_dir: str
     :param xcom_push: Does the stdout will be pushed to the next step using XCom.
-           The default is False.
+        The default is False.
     :type xcom_push: bool
-    :param xcom_all: Push all the stdout or just the last line. The default is False (last line).
+    :param xcom_all: Push all the stdout or just the last line.
+        The default is False (last line).
     :type xcom_all: bool
     :param docker_conn_id: ID of the Airflow connection to use
     :type docker_conn_id: str
     """
-    template_fields = ('command', 'environment',)
-    template_ext = ('.sh', '.bash',)
+    template_fields = ("command", "environment")
+    template_ext = (".sh", ".bash")
 
     @apply_defaults
     def __init__(
-            self,
-            image,
-            api_version=None,
-            command=None,
-            cpus=1.0,
-            docker_url='unix://var/run/docker.sock',
-            environment=None,
-            force_pull=False,
-            mem_limit=None,
-            network_mode=None,
-            tls_ca_cert=None,
-            tls_client_cert=None,
-            tls_client_key=None,
-            tls_hostname=None,
-            tls_ssl_version=None,
-            tmp_dir='/tmp/airflow',
-            user=None,
-            volumes=None,
-            working_dir=None,
-            xcom_push=False,
-            xcom_all=False,
-            docker_conn_id=None,
-            *args,
-            **kwargs):
+        self,
+        image,
+        api_version=None,
+        command=None,
+        cpus=1.0,
+        docker_url="unix://var/run/docker.sock",
+        environment=None,
+        force_pull=False,
+        mem_limit=None,
+        network_mode=None,
+        tls_ca_cert=None,
+        tls_client_cert=None,
+        tls_client_key=None,
+        tls_hostname=None,
+        tls_ssl_version=None,
+        tmp_dir="/tmp/airflow",
+        user=None,
+        volumes=None,
+        working_dir=None,
+        xcom_push=False,
+        xcom_all=False,
+        docker_conn_id=None,
+        *args,
+        **kwargs
+    ):
 
         super(DockerOperator, self).__init__(*args, **kwargs)
         self.api_version = api_version
@@ -145,7 +152,7 @@ class DockerOperator(BaseOperator):
         self.xcom_push_flag = xcom_push
         self.xcom_all = xcom_all
         self.docker_conn_id = docker_conn_id
-        self.shm_size = kwargs.get('shm_size')
+        self.shm_size = kwargs.get("shm_size")
 
         self.cli = None
         self.container = None
@@ -155,11 +162,11 @@ class DockerOperator(BaseOperator):
             docker_conn_id=self.docker_conn_id,
             base_url=self.docker_url,
             version=self.api_version,
-            tls=self.__get_tls_config()
+            tls=self.__get_tls_config(),
         )
 
     def execute(self, context):
-        self.log.info('Starting docker container from image %s', self.image)
+        self.log.info("Starting docker container from image %s", self.image)
 
         tls_config = self.__get_tls_config()
 
@@ -167,27 +174,25 @@ class DockerOperator(BaseOperator):
             self.cli = self.get_hook().get_conn()
         else:
             self.cli = APIClient(
-                base_url=self.docker_url,
-                version=self.api_version,
-                tls=tls_config
+                base_url=self.docker_url, version=self.api_version, tls=tls_config
             )
 
-        if ':' not in self.image:
-            image = self.image + ':latest'
+        if ":" not in self.image:
+            image = self.image + ":latest"
         else:
             image = self.image
 
         if self.force_pull or len(self.cli.images(name=image)) == 0:
-            self.log.info('Pulling docker image %s', image)
+            self.log.info("Pulling docker image %s", image)
             for l in self.cli.pull(image, stream=True):
-                output = json.loads(l.decode('utf-8'))
-                self.log.info("%s", output['status'])
+                output = json.loads(l.decode("utf-8"))
+                self.log.info("%s", output["status"])
 
         cpu_shares = int(round(self.cpus * 1024))
 
-        with TemporaryDirectory(prefix='airflowtmp') as host_tmp_dir:
-            self.environment['AIRFLOW_TMP_DIR'] = self.tmp_dir
-            self.volumes.append('{0}:{1}'.format(host_tmp_dir, self.tmp_dir))
+        with TemporaryDirectory(prefix="airflowtmp") as host_tmp_dir:
+            self.environment["AIRFLOW_TMP_DIR"] = self.tmp_dir
+            self.volumes.append("{0}:{1}".format(host_tmp_dir, self.tmp_dir))
 
             self.container = self.cli.create_container(
                 command=self.get_command(),
@@ -196,30 +201,35 @@ class DockerOperator(BaseOperator):
                 host_config=self.cli.create_host_config(
                     binds=self.volumes,
                     network_mode=self.network_mode,
-                    shm_size=self.shm_size),
+                    shm_size=self.shm_size,
+                ),
                 image=image,
                 mem_limit=self.mem_limit,
                 user=self.user,
-                working_dir=self.working_dir
+                working_dir=self.working_dir,
             )
-            self.cli.start(self.container['Id'])
+            self.cli.start(self.container["Id"])
 
-            line = ''
-            for line in self.cli.logs(container=self.container['Id'], stream=True):
+            line = ""
+            for line in self.cli.logs(container=self.container["Id"], stream=True):
                 line = line.strip()
-                if hasattr(line, 'decode'):
-                    line = line.decode('utf-8')
+                if hasattr(line, "decode"):
+                    line = line.decode("utf-8")
                 self.log.info(line)
 
-            exit_code = self.cli.wait(self.container['Id'])
+            exit_code = self.cli.wait(self.container["Id"])
             if exit_code != 0:
-                raise AirflowException('docker container failed')
+                raise AirflowException("docker container failed")
 
             if self.xcom_push_flag:
-                return self.cli.logs(container=self.container['Id']) if self.xcom_all else str(line)
+                return (
+                    self.cli.logs(container=self.container["Id"])
+                    if self.xcom_all
+                    else str(line)
+                )
 
     def get_command(self):
-        if self.command is not None and self.command.strip().find('[') == 0:
+        if self.command is not None and self.command.strip().find("[") == 0:
             commands = ast.literal_eval(self.command)
         else:
             commands = self.command
@@ -227,8 +237,8 @@ class DockerOperator(BaseOperator):
 
     def on_kill(self):
         if self.cli is not None:
-            self.log.info('Stopping docker container')
-            self.cli.stop(self.container['Id'])
+            self.log.info("Stopping docker container")
+            self.cli.stop(self.container["Id"])
 
     def __get_tls_config(self):
         tls_config = None
@@ -238,7 +248,7 @@ class DockerOperator(BaseOperator):
                 client_cert=(self.tls_client_cert, self.tls_client_key),
                 verify=True,
                 ssl_version=self.tls_ssl_version,
-                assert_hostname=self.tls_hostname
+                assert_hostname=self.tls_hostname,
             )
-            self.docker_url = self.docker_url.replace('tcp://', 'https://')
+            self.docker_url = self.docker_url.replace("tcp://", "https://")
         return tls_config

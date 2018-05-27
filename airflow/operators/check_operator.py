@@ -62,23 +62,20 @@ class CheckOperator(BaseOperator):
     :type sql: string
     """
 
-    template_fields = ('sql',)
-    template_ext = ('.hql', '.sql',)
-    ui_color = '#fff7e6'
+    template_fields = ("sql",)
+    template_ext = (".hql", ".sql")
+    ui_color = "#fff7e6"
 
     @apply_defaults
-    def __init__(
-            self, sql,
-            conn_id=None,
-            *args, **kwargs):
+    def __init__(self, sql, conn_id=None, *args, **kwargs):
         super(CheckOperator, self).__init__(*args, **kwargs)
         self.conn_id = conn_id
         self.sql = sql
 
     def execute(self, context=None):
-        self.log.info('Executing SQL check: %s', self.sql)
+        self.log.info("Executing SQL check: %s", self.sql)
         records = self.get_db_hook().get_first(self.sql)
-        self.log.info('Record: %s', records)
+        self.log.info("Record: %s", records)
         if not records:
             raise AirflowException("The query returned None")
         elif not all([bool(r) for r in records]):
@@ -117,18 +114,13 @@ class ValueCheckOperator(BaseOperator):
     :type sql: string
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'ValueCheckOperator'
-    }
-    template_fields = ('sql', 'pass_value',)
-    template_ext = ('.hql', '.sql',)
-    ui_color = '#fff7e6'
+    __mapper_args__ = {"polymorphic_identity": "ValueCheckOperator"}
+    template_fields = ("sql", "pass_value")
+    template_ext = (".hql", ".sql")
+    ui_color = "#fff7e6"
 
     @apply_defaults
-    def __init__(
-            self, sql, pass_value, tolerance=None,
-            conn_id=None,
-            *args, **kwargs):
+    def __init__(self, sql, pass_value, tolerance=None, conn_id=None, *args, **kwargs):
         super(ValueCheckOperator, self).__init__(*args, **kwargs)
         self.sql = sql
         self.conn_id = conn_id
@@ -138,7 +130,7 @@ class ValueCheckOperator(BaseOperator):
         self.has_tolerance = self.tol is not None
 
     def execute(self, context=None):
-        self.log.info('Executing SQL check: %s', self.sql)
+        self.log.info("Executing SQL check: %s", self.sql)
         records = self.get_db_hook().get_first(self.sql)
         if not records:
             raise AirflowException("The query returned None")
@@ -147,12 +139,14 @@ class ValueCheckOperator(BaseOperator):
         is_numeric_value_check = isinstance(pass_value_conv, float)
 
         tolerance_pct_str = None
-        if (self.tol is not None):
-            tolerance_pct_str = str(self.tol * 100) + '%'
+        if self.tol is not None:
+            tolerance_pct_str = str(self.tol * 100) + "%"
 
-        except_temp = ("Test failed.\nPass value:{pass_value_conv}\n"
-                       "Tolerance:{tolerance_pct_str}\n"
-                       "Query:\n{self.sql}\nResults:\n{records!s}")
+        except_temp = (
+            "Test failed.\nPass value:{pass_value_conv}\n"
+            "Tolerance:{tolerance_pct_str}\n"
+            "Query:\n{self.sql}\nResults:\n{records!s}"
+        )
         if not is_numeric_value_check:
             tests = [str(r) == pass_value_conv for r in records]
         elif is_numeric_value_check:
@@ -165,7 +159,8 @@ class ValueCheckOperator(BaseOperator):
                 tests = [
                     pass_value_conv * (1 - self.tol) <=
                     r <= pass_value_conv * (1 + self.tol)
-                    for r in num_rec]
+                    for r in num_rec
+                ]
             else:
                 tests = [r == pass_value_conv for r in num_rec]
         if not all(tests):
@@ -193,19 +188,22 @@ class IntervalCheckOperator(BaseOperator):
     :type metrics_threshold: dict
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'IntervalCheckOperator'
-    }
-    template_fields = ('sql1', 'sql2')
-    template_ext = ('.hql', '.sql',)
-    ui_color = '#fff7e6'
+    __mapper_args__ = {"polymorphic_identity": "IntervalCheckOperator"}
+    template_fields = ("sql1", "sql2")
+    template_ext = (".hql", ".sql")
+    ui_color = "#fff7e6"
 
     @apply_defaults
     def __init__(
-            self, table, metrics_thresholds,
-            date_filter_column='ds', days_back=-7,
-            conn_id=None,
-            *args, **kwargs):
+        self,
+        table,
+        metrics_thresholds,
+        date_filter_column="ds",
+        days_back=-7,
+        conn_id=None,
+        *args,
+        **kwargs
+    ):
         super(IntervalCheckOperator, self).__init__(*args, **kwargs)
         self.table = table
         self.metrics_thresholds = metrics_thresholds
@@ -213,17 +211,18 @@ class IntervalCheckOperator(BaseOperator):
         self.date_filter_column = date_filter_column
         self.days_back = -abs(days_back)
         self.conn_id = conn_id
-        sqlexp = ', '.join(self.metrics_sorted)
-        sqlt = ("SELECT {sqlexp} FROM {table}"
-                " WHERE {date_filter_column}=").format(**locals())
+        sqlexp = ", ".join(self.metrics_sorted)
+        sqlt = ("SELECT {sqlexp} FROM {table}" " WHERE {date_filter_column}=").format(
+            **locals()
+        )
         self.sql1 = sqlt + "'{{ ds }}'"
-        self.sql2 = sqlt + "'{{ macros.ds_add(ds, "+str(self.days_back)+") }}'"
+        self.sql2 = sqlt + "'{{ macros.ds_add(ds, " + str(self.days_back) + ") }}'"
 
     def execute(self, context=None):
         hook = self.get_db_hook()
-        self.log.info('Executing SQL check: %s', self.sql2)
+        self.log.info("Executing SQL check: %s", self.sql2)
         row2 = hook.get_first(self.sql2)
-        self.log.info('Executing SQL check: %s', self.sql1)
+        self.log.info("Executing SQL check: %s", self.sql1)
         row1 = hook.get_first(self.sql1)
         if not row2:
             raise AirflowException("The query {q} returned None".format(q=self.sql2))
@@ -241,8 +240,9 @@ class IntervalCheckOperator(BaseOperator):
             if current[m] == 0 or reference[m] == 0:
                 ratio = None
             else:
-                ratio = float(max(current[m], reference[m])) / \
-                    min(current[m], reference[m])
+                ratio = float(max(current[m], reference[m])) / min(
+                    current[m], reference[m]
+                )
             self.log.info(rlog.format(m, ratio, self.metrics_thresholds[m]))
             ratios[m] = ratio
             test_results[m] = ratio < self.metrics_thresholds[m]

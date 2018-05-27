@@ -46,22 +46,24 @@ class EmailOperator(BaseOperator):
     :type mime_charset: string
     """
 
-    template_fields = ('to', 'subject', 'html_content')
-    template_ext = ('.html',)
-    ui_color = '#e6faf9'
+    template_fields = ("to", "subject", "html_content")
+    template_ext = (".html",)
+    ui_color = "#e6faf9"
 
     @apply_defaults
     def __init__(
-            self,
-            to,
-            subject,
-            html_content,
-            files=None,
-            cc=None,
-            bcc=None,
-            mime_subtype='mixed',
-            mime_charset='us_ascii',
-            *args, **kwargs):
+        self,
+        to,
+        subject,
+        html_content,
+        files=None,
+        cc=None,
+        bcc=None,
+        mime_subtype="mixed",
+        mime_charset="us_ascii",
+        *args,
+        **kwargs
+    ):
         super(EmailOperator, self).__init__(*args, **kwargs)
         self.to = to
         self.subject = subject
@@ -73,6 +75,13 @@ class EmailOperator(BaseOperator):
         self.mime_charset = mime_charset
 
     def execute(self, context):
-        send_email(self.to, self.subject, self.html_content,
-                   files=self.files, cc=self.cc, bcc=self.bcc,
-                   mime_subtype=self.mime_subtype, mine_charset=self.mime_charset)
+        send_email(
+            self.to,
+            self.subject,
+            self.html_content,
+            files=self.files,
+            cc=self.cc,
+            bcc=self.bcc,
+            mime_subtype=self.mime_subtype,
+            mine_charset=self.mime_charset,
+        )

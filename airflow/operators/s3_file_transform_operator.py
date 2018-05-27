@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -59,21 +59,23 @@ class S3FileTransformOperator(BaseOperator):
     :type select_expression: str
     """
 
-    template_fields = ('source_s3_key', 'dest_s3_key')
+    template_fields = ("source_s3_key", "dest_s3_key")
     template_ext = ()
-    ui_color = '#f9c915'
+    ui_color = "#f9c915"
 
     @apply_defaults
     def __init__(
-            self,
-            source_s3_key,
-            dest_s3_key,
-            transform_script=None,
-            select_expression=None,
-            source_aws_conn_id='aws_default',
-            dest_aws_conn_id='aws_default',
-            replace=False,
-            *args, **kwargs):
+        self,
+        source_s3_key,
+        dest_s3_key,
+        transform_script=None,
+        select_expression=None,
+        source_aws_conn_id="aws_default",
+        dest_aws_conn_id="aws_default",
+        replace=False,
+        *args,
+        **kwargs
+    ):
         super(S3FileTransformOperator, self).__init__(*args, **kwargs)
         self.source_s3_key = source_s3_key
         self.source_aws_conn_id = source_aws_conn_id
@@ -86,7 +88,8 @@ class S3FileTransformOperator(BaseOperator):
     def execute(self, context):
         if self.transform_script is None and self.select_expression is None:
             raise AirflowException(
-                "Either transform_script or select_expression must be specified")
+                "Either transform_script or select_expression must be specified"
+            )
 
         source_s3 = S3Hook(aws_conn_id=self.source_aws_conn_id)
         dest_s3 = S3Hook(aws_conn_id=self.dest_aws_conn_id)
@@ -94,19 +97,20 @@ class S3FileTransformOperator(BaseOperator):
         self.log.info("Downloading source S3 file %s", self.source_s3_key)
         if not source_s3.check_for_key(self.source_s3_key):
             raise AirflowException(
-                "The source key {0} does not exist".format(self.source_s3_key))
+                "The source key {0} does not exist".format(self.source_s3_key)
+            )
         source_s3_key_object = source_s3.get_key(self.source_s3_key)
 
         with NamedTemporaryFile("wb") as f_source, NamedTemporaryFile("wb") as f_dest:
             self.log.info(
                 "Dumping S3 file %s contents to local file %s",
-                self.source_s3_key, f_source.name
+                self.source_s3_key,
+                f_source.name,
             )
 
             if self.select_expression is not None:
                 content = source_s3.select_key(
-                    key=self.source_s3_key,
-                    expression=self.select_expression
+                    key=self.source_s3_key, expression=self.select_expression
                 )
                 f_source.write(content.encode("utf-8"))
             else:
@@ -116,24 +120,28 @@ class S3FileTransformOperator(BaseOperator):
             if self.transform_script is not None:
                 transform_script_process = subprocess.Popen(
                     [self.transform_script, f_source.name, f_dest.name],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
-                (transform_script_stdoutdata, transform_script_stderrdata) = \
-                    transform_script_process.communicate()
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    close_fds=True,
+                )
+                (
+                    transform_script_stdoutdata,
+                    transform_script_stderrdata,
+                ) = transform_script_process.communicate()
                 self.log.info("Transform script stdout %s", transform_script_stdoutdata)
                 if transform_script_process.returncode > 0:
                     raise AirflowException(
-                        "Transform script failed %s", transform_script_stderrdata)
+                        "Transform script failed %s", transform_script_stderrdata
+                    )
                 else:
                     self.log.info(
                         "Transform script successful. Output temporarily located at %s",
-                        f_dest.name
+                        f_dest.name,
                     )
 
             self.log.info("Uploading transformed file to S3")
             f_dest.flush()
             dest_s3.load_file(
-                filename=f_dest.name,
-                key=self.dest_s3_key,
-                replace=self.replace
+                filename=f_dest.name, key=self.dest_s3_key, replace=self.replace
             )
             self.log.info("Upload successful")

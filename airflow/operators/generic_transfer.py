@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -43,19 +43,21 @@ class GenericTransfer(BaseOperator):
     :type preoperator: str or list of str
     """
 
-    template_fields = ('sql', 'destination_table', 'preoperator')
-    template_ext = ('.sql', '.hql',)
-    ui_color = '#b0f07c'
+    template_fields = ("sql", "destination_table", "preoperator")
+    template_ext = (".sql", ".hql")
+    ui_color = "#b0f07c"
 
     @apply_defaults
     def __init__(
-            self,
-            sql,
-            destination_table,
-            source_conn_id,
-            destination_conn_id,
-            preoperator=None,
-            *args, **kwargs):
+        self,
+        sql,
+        destination_table,
+        source_conn_id,
+        destination_conn_id,
+        preoperator=None,
+        *args,
+        **kwargs
+    ):
         super(GenericTransfer, self).__init__(*args, **kwargs)
         self.sql = sql
         self.destination_table = destination_table

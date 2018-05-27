@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -44,19 +44,21 @@ class PrestoToMySqlTransfer(BaseOperator):
     :type mysql_preoperator: str
     """
 
-    template_fields = ('sql', 'mysql_table', 'mysql_preoperator')
-    template_ext = ('.sql',)
-    ui_color = '#a0e08c'
+    template_fields = ("sql", "mysql_table", "mysql_preoperator")
+    template_ext = (".sql",)
+    ui_color = "#a0e08c"
 
     @apply_defaults
     def __init__(
-            self,
-            sql,
-            mysql_table,
-            presto_conn_id='presto_default',
-            mysql_conn_id='mysql_default',
-            mysql_preoperator=None,
-            *args, **kwargs):
+        self,
+        sql,
+        mysql_table,
+        presto_conn_id="presto_default",
+        mysql_conn_id="mysql_default",
+        mysql_preoperator=None,
+        *args,
+        **kwargs
+    ):
         super(PrestoToMySqlTransfer, self).__init__(*args, **kwargs)
         self.sql = sql
         self.mysql_table = mysql_table

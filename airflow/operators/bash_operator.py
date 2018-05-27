@@ -36,8 +36,8 @@ from airflow.utils.file import TemporaryDirectory
 # gives not guarantee that these variables are available in the impersonated environment.
 # Hence, we need to propagate them in the Bash script used as a wrapper of commands in
 # this BashOperator.
-PYTHONPATH_VAR = 'PYTHONPATH'
-AIRFLOW_HOME_VAR = 'AIRFLOW_HOME'
+PYTHONPATH_VAR = "PYTHONPATH"
+AIRFLOW_HOME_VAR = "AIRFLOW_HOME"
 
 
 class BashOperator(BaseOperator):
@@ -57,18 +57,20 @@ class BashOperator(BaseOperator):
     :type env: dict
     :type output_encoding: output encoding of bash command
     """
-    template_fields = ('bash_command', 'env')
-    template_ext = ('.sh', '.bash',)
-    ui_color = '#f0ede4'
+    template_fields = ("bash_command", "env")
+    template_ext = (".sh", ".bash")
+    ui_color = "#f0ede4"
 
     @apply_defaults
     def __init__(
-            self,
-            bash_command,
-            xcom_push=False,
-            env=None,
-            output_encoding='utf-8',
-            *args, **kwargs):
+        self,
+        bash_command,
+        xcom_push=False,
+        env=None,
+        output_encoding="utf-8",
+        *args,
+        **kwargs
+    ):
 
         super(BashOperator, self).__init__(*args, **kwargs)
         self.bash_command = bash_command
@@ -83,52 +85,51 @@ class BashOperator(BaseOperator):
         """
         self.log.info("Tmp dir root location: \n %s", gettempdir())
 
-        airflow_home_value = conf.get('core', AIRFLOW_HOME_VAR)
-        pythonpath_value = os.environ.get(PYTHONPATH_VAR, '')
+        airflow_home_value = conf.get("core", AIRFLOW_HOME_VAR)
+        pythonpath_value = os.environ.get(PYTHONPATH_VAR, "")
 
-        bash_command = ('export {}={}; '.format(AIRFLOW_HOME_VAR, airflow_home_value) +
-                        'export {}={}; '.format(PYTHONPATH_VAR, pythonpath_value) +
-                        self.bash_command)
+        bash_command = (
+            "export {}={}; ".format(AIRFLOW_HOME_VAR, airflow_home_value) +
+            "export {}={}; ".format(PYTHONPATH_VAR, pythonpath_value) +
+            self.bash_command
+        )
         self.lineage_data = bash_command
 
-        with TemporaryDirectory(prefix='airflowtmp') as tmp_dir:
+        with TemporaryDirectory(prefix="airflowtmp") as tmp_dir:
             with NamedTemporaryFile(dir=tmp_dir, prefix=self.task_id) as f:
 
-                f.write(bytes(bash_command, 'utf_8'))
+                f.write(bytes(bash_command, "utf_8"))
                 f.flush()
                 fname = f.name
                 script_location = os.path.abspath(fname)
-                self.log.info(
-                    "Temporary script location: %s",
-                    script_location
-                )
+                self.log.info("Temporary script location: %s", script_location)
 
                 def pre_exec():
                     # Restore default signal disposition and invoke setsid
-                    for sig in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                    for sig in ("SIGPIPE", "SIGXFZ", "SIGXFSZ"):
                         if hasattr(signal, sig):
                             signal.signal(getattr(signal, sig), signal.SIG_DFL)
                     os.setsid()
 
                 self.log.info("Running command: %s", bash_command)
                 sp = Popen(
-                    ['bash', fname],
-                    stdout=PIPE, stderr=STDOUT,
-                    cwd=tmp_dir, env=self.env,
-                    preexec_fn=pre_exec)
+                    ["bash", fname],
+                    stdout=PIPE,
+                    stderr=STDOUT,
+                    cwd=tmp_dir,
+                    env=self.env,
+                    preexec_fn=pre_exec,
+                )
 
                 self.sp = sp
 
                 self.log.info("Output:")
-                line = ''
-                for line in iter(sp.stdout.readline, b''):
+                line = ""
+                for line in iter(sp.stdout.readline, b""):
                     line = line.decode(self.output_encoding).rstrip()
                     self.log.info(line)
                 sp.wait()
-                self.log.info(
-                    "Command exited with return code %s",
-                    sp.returncode
-                )
+                self.log.info("Command exited with return code %s", sp.returncode)
 
                 if sp.returncode:
                     raise AirflowException("Bash command failed")
@@ -137,5 +138,5 @@ class BashOperator(BaseOperator):
             return line
 
     def on_kill(self):
-        self.log.info('Sending SIGTERM signal to bash process group')
+        self.log.info("Sending SIGTERM signal to bash process group")
         os.killpg(os.getpgid(self.sp.pid), signal.SIGTERM)

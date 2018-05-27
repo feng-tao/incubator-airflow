@@ -57,10 +57,7 @@ class DruidCheckOperator(CheckOperator):
     """
 
     @apply_defaults
-    def __init__(
-            self, sql,
-            druid_broker_conn_id='druid_broker_default',
-            *args, **kwargs):
+    def __init__(self, sql, druid_broker_conn_id="druid_broker_default", *args, **kwargs):
         super(DruidCheckOperator, self).__init__(sql=sql, *args, **kwargs)
         self.druid_broker_conn_id = druid_broker_conn_id
         self.sql = sql
@@ -83,7 +80,7 @@ class DruidCheckOperator(CheckOperator):
             return cur.fetchone()
 
     def execute(self, context=None):
-        self.log.info('Executing SQL check: {}'.format(self.sql))
+        self.log.info("Executing SQL check: {}".format(self.sql))
         record = self.get_first(self.sql)
         self.log.info("Record: {}".format(str(record)))
         if not record:

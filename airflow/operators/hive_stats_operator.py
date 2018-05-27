@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -60,21 +60,23 @@ class HiveStatsCollectionOperator(BaseOperator):
     :type assignment_func: function
     """
 
-    template_fields = ('table', 'partition', 'ds', 'dttm')
-    ui_color = '#aff7a6'
+    template_fields = ("table", "partition", "ds", "dttm")
+    ui_color = "#aff7a6"
 
     @apply_defaults
     def __init__(
-            self,
-            table,
-            partition,
-            extra_exprs=None,
-            col_blacklist=None,
-            assignment_func=None,
-            metastore_conn_id='metastore_default',
-            presto_conn_id='presto_default',
-            mysql_conn_id='airflow_db',
-            *args, **kwargs):
+        self,
+        table,
+        partition,
+        extra_exprs=None,
+        col_blacklist=None,
+        assignment_func=None,
+        metastore_conn_id="metastore_default",
+        presto_conn_id="presto_default",
+        mysql_conn_id="airflow_db",
+        *args,
+        **kwargs
+    ):
         super(HiveStatsCollectionOperator, self).__init__(*args, **kwargs)
 
         self.table = table
@@ -85,25 +87,25 @@ class HiveStatsCollectionOperator(BaseOperator):
         self.presto_conn_id = presto_conn_id
         self.mysql_conn_id = mysql_conn_id
         self.assignment_func = assignment_func
-        self.ds = '{{ ds }}'
-        self.dttm = '{{ execution_date.isoformat() }}'
+        self.ds = "{{ ds }}"
+        self.dttm = "{{ execution_date.isoformat() }}"
 
     def get_default_exprs(self, col, col_type):
         if col in self.col_blacklist:
             return {}
         d = {}
-        d[(col, 'non_null')] = "COUNT({col})"
-        if col_type in ['double', 'int', 'bigint', 'float', 'double']:
-            d[(col, 'sum')] = 'SUM({col})'
-            d[(col, 'min')] = 'MIN({col})'
-            d[(col, 'max')] = 'MAX({col})'
-            d[(col, 'avg')] = 'AVG({col})'
-        elif col_type == 'boolean':
-            d[(col, 'true')] = 'SUM(CASE WHEN {col} THEN 1 ELSE 0 END)'
-            d[(col, 'false')] = 'SUM(CASE WHEN NOT {col} THEN 1 ELSE 0 END)'
-        elif col_type in ['string']:
-            d[(col, 'len')] = 'SUM(CAST(LENGTH({col}) AS BIGINT))'
-            d[(col, 'approx_distinct')] = 'APPROX_DISTINCT({col})'
+        d[(col, "non_null")] = "COUNT({col})"
+        if col_type in ["double", "int", "bigint", "float", "double"]:
+            d[(col, "sum")] = "SUM({col})"
+            d[(col, "min")] = "MIN({col})"
+            d[(col, "max")] = "MAX({col})"
+            d[(col, "avg")] = "AVG({col})"
+        elif col_type == "boolean":
+            d[(col, "true")] = "SUM(CASE WHEN {col} THEN 1 ELSE 0 END)"
+            d[(col, "false")] = "SUM(CASE WHEN NOT {col} THEN 1 ELSE 0 END)"
+        elif col_type in ["string"]:
+            d[(col, "len")] = "SUM(CAST(LENGTH({col}) AS BIGINT))"
+            d[(col, "approx_distinct")] = "APPROX_DISTINCT({col})"
 
         return {k: v.format(col=col) for k, v in d.items()}
 
@@ -112,9 +114,7 @@ class HiveStatsCollectionOperator(BaseOperator):
         table = metastore.get_table(table_name=self.table)
         field_types = {col.name: col.type for col in table.sd.cols}
 
-        exprs = {
-            ('', 'count'): 'COUNT(*)'
-        }
+        exprs = {("", "count"): "COUNT(*)"}
         for col, col_type in list(field_types.items()):
             d = {}
             if self.assignment_func:
@@ -126,12 +126,11 @@ class HiveStatsCollectionOperator(BaseOperator):
             exprs.update(d)
         exprs.update(self.extra_exprs)
         exprs = OrderedDict(exprs)
-        exprs_str = ",\n        ".join([
-            v + " AS " + k[0] + '__' + k[1]
-            for k, v in exprs.items()])
+        exprs_str = ",\n        ".join(
+            [v + " AS " + k[0] + "__" + k[1] for k, v in exprs.items()]
+        )
 
-        where_clause = [
-            "{0} = '{1}'".format(k, v) for k, v in self.partition.items()]
+        where_clause = ["{0} = '{1}'".format(k, v) for k, v in self.partition.items()]
         where_clause = " AND\n        ".join(where_clause)
         sql = """
         SELECT
@@ -139,10 +138,12 @@ class HiveStatsCollectionOperator(BaseOperator):
         FROM {self.table}
         WHERE
             {where_clause};
-        """.format(**locals())
+        """.format(
+            **locals()
+        )
 
         hook = PrestoHook(presto_conn_id=self.presto_conn_id)
-        self.log.info('Executing SQL check: %s', sql)
+        self.log.info("Executing SQL check: %s", sql)
         row = hook.get_first(hql=sql)
         self.log.info("Record: %s", row)
         if not row:
@@ -159,7 +160,9 @@ class HiveStatsCollectionOperator(BaseOperator):
             partition_repr='{part_json}' AND
             dttm='{self.dttm}'
         LIMIT 1;
-        """.format(**locals())
+        """.format(
+            **locals()
+        )
         if mysql.get_records(sql):
             sql = """
             DELETE FROM hive_stats
@@ -167,24 +170,26 @@ class HiveStatsCollectionOperator(BaseOperator):
                 table_name='{self.table}' AND
                 partition_repr='{part_json}' AND
                 dttm='{self.dttm}';
-            """.format(**locals())
+            """.format(
+                **locals()
+            )
             mysql.run(sql)
 
         self.log.info("Pivoting and loading cells into the Airflow db")
         rows = [
-            (self.ds, self.dttm, self.table, part_json) +
-            (r[0][0], r[0][1], r[1])
-            for r in zip(exprs, row)]
+            (self.ds, self.dttm, self.table, part_json) + (r[0][0], r[0][1], r[1])
+            for r in zip(exprs, row)
+        ]
         mysql.insert_rows(
-            table='hive_stats',
+            table="hive_stats",
             rows=rows,
             target_fields=[
-                'ds',
-                'dttm',
-                'table_name',
-                'partition_repr',
-                'col',
-                'metric',
-                'value',
-            ]
+                "ds",
+                "dttm",
+                "table_name",
+                "partition_repr",
+                "col",
+                "metric",
+                "value",
+            ],
         )

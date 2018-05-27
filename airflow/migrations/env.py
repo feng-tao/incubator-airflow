@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -59,8 +59,11 @@ def run_migrations_offline():
 
     """
     context.configure(
-        url=settings.SQL_ALCHEMY_CONN, target_metadata=target_metadata,
-        literal_binds=True, compare_type=COMPARE_TYPE)
+        url=settings.SQL_ALCHEMY_CONN,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=COMPARE_TYPE,
+    )
 
     with context.begin_transaction():
         context.run_migrations()
@@ -84,6 +87,7 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()
