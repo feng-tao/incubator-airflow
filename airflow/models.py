@@ -3671,12 +3671,18 @@ class DAG(BaseDag, LoggingMixin):
 
     @provide_session
     def set_dag_runs_state(
-            self, state=State.RUNNING, session=None):
+            self,
+            state=State.RUNNING,
+            session=None,
+            include_backfill_dagruns=False):
         drs = session.query(DagModel).filter_by(dag_id=self.dag_id).all()
         dirty_ids = []
         for dr in drs:
-            dr.state = state
-            dirty_ids.append(dr.dag_id)
+            # only reset backfill dag run if the flag is set
+            if include_backfill_dagruns or not dr.is_backfill:
+                dr.state = state
+                dirty_ids.append(dr.dag_id)
+
         DagStat.update(dirty_ids, session=session)
 
     @provide_session
@@ -3688,7 +3694,8 @@ class DAG(BaseDag, LoggingMixin):
             include_subdags=True,
             reset_dag_runs=True,
             dry_run=False,
-            session=None):
+            session=None,
+            include_backfill_dagruns=False):
         """
         Clears a set of task instances associated with the current dag for
         a specified date range.
@@ -3737,7 +3744,7 @@ class DAG(BaseDag, LoggingMixin):
         if do_it:
             clear_task_instances(tis.all(), session, dag=self)
             if reset_dag_runs:
-                self.set_dag_runs_state(session=session)
+                self.set_dag_runs_state(session=session, include_backfill_dagruns=include_backfill_dagruns)
         else:
             count = 0
             print("Bail. Nothing was cleared.")
@@ -3755,7 +3762,8 @@ class DAG(BaseDag, LoggingMixin):
             confirm_prompt=False,
             include_subdags=True,
             reset_dag_runs=True,
-            dry_run=False):
+            dry_run=False,
+            only_include_backfill_dagruns=False):
         all_tis = []
         for dag in dags:
             tis = dag.clear(
@@ -3794,7 +3802,8 @@ class DAG(BaseDag, LoggingMixin):
                           confirm_prompt=False,
                           include_subdags=include_subdags,
                           reset_dag_runs=reset_dag_runs,
-                          dry_run=False)
+                          dry_run=False,
+                          include_backfill_dagruns=only_include_backfill_dagruns)
         else:
             count = 0
             print("Bail. Nothing was cleared.")
