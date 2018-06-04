@@ -4952,7 +4952,6 @@ class DagRun(Base, LoggingMixin):
 
         :return: State
         """
-
         dag = self.get_dag()
 
         tis = self.get_task_instances(session=session)
@@ -5000,7 +4999,6 @@ class DagRun(Base, LoggingMixin):
         if len(tis) == len(dag.active_tasks):
             root_ids = [t.task_id for t in dag.roots]
             roots = [t for t in tis if t.task_id in root_ids]
-
             # if all roots finished and at least one failed, the run failed
             if (not unfinished_tasks and
                     any(r.state in (State.FAILED, State.UPSTREAM_FAILED) for r in roots)):
