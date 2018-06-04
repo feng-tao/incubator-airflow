@@ -85,6 +85,7 @@ class BaseExecutor(LoggingMixin):
             pool=pool,
             pickle_id=pickle_id,
             cfg_path=cfg_path)
+
         self.queue_command(
             task_instance,
             command,

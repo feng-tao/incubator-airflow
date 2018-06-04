@@ -199,7 +199,6 @@ class BaseJob(Base, LoggingMixin):
 
             # Run
             self._execute()
-
             # Marking the success in the DB
             self.end_date = timezone.utcnow()
             self.state = State.SUCCESS
@@ -2224,6 +2223,12 @@ class BackfillJob(BaseJob):
                             "externally. This should not happen"
                         )
                         ti.set_state(State.SCHEDULED, session=session)
+                    elif ti.state == State.FAILED:
+                        self.log.error("Task instance %s failed", ti)
+                        if key in ti_status.running:
+                            ti_status.running.pop(key)
+
+                        ti.set_state(State.SCHEDULED, session=session)
 
                     # The task was already marked successful or skipped by a
                     # different Job. Don't rerun it.
@@ -2241,13 +2246,7 @@ class BackfillJob(BaseJob):
                         if key in ti_status.running:
                             ti_status.running.pop(key)
                         continue
-                    elif ti.state == State.FAILED:
-                        self.log.error("Task instance %s failed", ti)
-                        ti_status.failed.add(key)
-                        ti_status.to_run.pop(key)
-                        if key in ti_status.running:
-                            ti_status.running.pop(key)
-                        continue
+
                     elif ti.state == State.UPSTREAM_FAILED:
                         self.log.error("Task instance %s upstream failed", ti)
                         ti_status.failed.add(key)
@@ -2268,6 +2267,7 @@ class BackfillJob(BaseJob):
                             dep_context=backfill_context,
                             session=session,
                             verbose=self.verbose):
+
                         ti.refresh_from_db(lock_for_update=True, session=session)
                         if ti.state == State.SCHEDULED or ti.state == State.UP_FOR_RETRY:
                             if executor.has_task(ti):
@@ -2276,6 +2276,7 @@ class BackfillJob(BaseJob):
                                     "waiting for queue to clear",
                                     ti
                                 )
+
                             else:
                                 self.log.debug('Sending %s to executor', ti)
                                 # Skip scheduled state, we are executing immediately
@@ -2295,6 +2296,7 @@ class BackfillJob(BaseJob):
                                     ignore_depends_on_past=ignore_depends_on_past,
                                     pool=self.pool,
                                     cfg_path=cfg_path)
+
                                 ti_status.running[key] = ti
                                 ti_status.to_run.pop(key)
                         session.commit()
@@ -2338,7 +2340,6 @@ class BackfillJob(BaseJob):
                 )
                 ti_status.deadlocked.update(ti_status.to_run.values())
                 ti_status.to_run.clear()
-
             # check executor state
             self._manage_executor_state(ti_status.running)
 
@@ -2356,7 +2357,6 @@ class BackfillJob(BaseJob):
 
                 if run.dag.is_paused:
                     models.DagStat.update([run.dag_id], session=session)
-
             self._log_progress(ti_status)
 
         # return updated status
@@ -2484,6 +2484,7 @@ class BackfillJob(BaseJob):
                 remaining_dates = (
                     ti_status.total_runs - len(ti_status.executed_dag_run_dates)
                 )
+
                 err = self._collect_errors(ti_status=ti_status, session=session)
                 if err:
                     raise AirflowException(err)
@@ -2495,6 +2496,8 @@ class BackfillJob(BaseJob):
                         self.dag_id
                     )
                     time.sleep(self.delay_on_limit_secs)
+        except Exception as e:
+            self.log.exception(e)
         finally:
             executor.end()
             session.commit()
