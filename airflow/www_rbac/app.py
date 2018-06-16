@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -37,7 +37,7 @@ appbuilder = None
 csrf = CSRFProtect()
 
 
-def create_app(config=None, testing=False, app_name="Airflow"):
+def create_app(config=None, session=None, testing=False, app_name="Airflow"):
     global app, appbuilder
     app = Flask(__name__)
     app.secret_key = conf.get('webserver', 'SECRET_KEY')
@@ -66,7 +66,7 @@ def create_app(config=None, testing=False, app_name="Airflow"):
     with app.app_context():
         appbuilder = AppBuilder(
             app,
-            db.session,
+            db.session if not session else session,
             security_manager_class=app.config.get('SECURITY_MANAGER_CLASS'),
             base_template='appbuilder/baselayout.html')
 
@@ -162,14 +162,14 @@ def root_app(env, resp):
     return [b'Apache Airflow is not at this location']
 
 
-def cached_app(config=None, testing=False):
+def cached_app(config=None, session=None, testing=False):
     global app, appbuilder
     if not app or not appbuilder:
         base_url = urlparse(conf.get('webserver', 'base_url'))[2]
         if not base_url or base_url == '/':
             base_url = ""
 
-        app, _ = create_app(config, testing)
+        app, _ = create_app(config, session, testing)
         app = DispatcherMiddleware(root_app, {base_url: app})
     return app
 

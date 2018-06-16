@@ -40,6 +40,7 @@ def configure_logging():
 
     if logging_class_path:
         try:
+            print (logging_class_path)
             logging_config = import_string(logging_class_path)
 
             # Make sure that the variable is in scope
