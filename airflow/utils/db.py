@@ -302,6 +302,7 @@ def initdb(rbac=False):
     dagbag = models.DagBag()
     # Save individual DAGs in the ORM
     for dag in dagbag.dags.values():
+        # todo(tao) Add the instrumentation here?
         dag.sync_to_db()
     # Deactivate the unknown ones
     models.DAG.deactivate_unknown_dags(dagbag.dags.keys())
