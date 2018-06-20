@@ -1792,6 +1792,7 @@ class SchedulerJob(BaseJob):
 
         # Save individual DAGs in the ORM and update DagModel.last_scheduled_time
         for dag in dagbag.dags.values():
+            # todo(tao): add intrumentation here?
             dag.sync_to_db()
 
         paused_dag_ids = [dag.dag_id for dag in dagbag.dags.values()

@@ -1850,7 +1850,7 @@ class SchedulerJobTest(unittest.TestCase):
             new_state=State.NONE,
             session=session)
         ti1a.refresh_from_db(session=session)
-        self.assertEqual(ti1a.state, State.NONE)
+        self.assertEqual(ti1a.state, State.SCHEDULED)
 
         # don't touch ti1b
         ti1b.refresh_from_db(session=session)
