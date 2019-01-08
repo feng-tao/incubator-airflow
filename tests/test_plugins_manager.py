@@ -32,7 +32,7 @@ from airflow.hooks.base_hook import BaseHook
 from airflow.models import BaseOperator
 from airflow.sensors.base_sensor_operator import BaseSensorOperator
 from airflow.executors.base_executor import BaseExecutor
-from airflow.www.app import cached_app
+from airflow.www.app import create_app
 from airflow.www_rbac import app as application
 
 
@@ -67,7 +67,7 @@ class PluginsTest(unittest.TestCase):
         self.assertTrue(callable(plugin_macro))
 
     def test_admin_views(self):
-        app = cached_app()
+        app = create_app(testing=True)
         [admin] = app.extensions['admin']
         category = admin._menu_categories['Test Plugin']
         [admin_view] = [v for v in category.get_children()
@@ -75,11 +75,11 @@ class PluginsTest(unittest.TestCase):
         self.assertEqual('Test View', admin_view.name)
 
     def test_flask_blueprints(self):
-        app = cached_app()
+        app = create_app(testing=True)
         self.assertIsInstance(app.blueprints['test_plugin'], Blueprint)
 
     def test_menu_links(self):
-        app = cached_app()
+        app = create_app(testing=True)
         [admin] = app.extensions['admin']
         category = admin._menu_categories['Test Plugin']
         [menu_link] = [ml for ml in category.get_children()
@@ -93,7 +93,7 @@ class PluginsTestRBAC(unittest.TestCase):
         self.app, self.appbuilder = application.create_app(testing=True)
 
     def test_flaskappbuilder_views(self):
-        from tests.plugins.test_plugin import v_appbuilder_package
+        from airflow.appbuilder_views.test_plugin import v_appbuilder_package
         appbuilder_class_name = str(v_appbuilder_package['view'].__class__.__name__)
         plugin_views = [view for view in self.appbuilder.baseviews
                         if view.blueprint.name == appbuilder_class_name]
@@ -112,7 +112,7 @@ class PluginsTestRBAC(unittest.TestCase):
         self.assertEqual(link.childs[0].name, v_appbuilder_package['name'])
 
     def test_flaskappbuilder_menu_links(self):
-        from tests.plugins.test_plugin import appbuilder_mitem
+        from airflow.appbuilder_menu_items.test_plugin import appbuilder_mitem
 
         # menu item should exist matching appbuilder_mitem
         links = [menu_item for menu_item in self.appbuilder.menu.menu
